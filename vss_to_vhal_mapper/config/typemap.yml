@@ -1,4 +1,5 @@
-# VSS type → Android type compatibility
+# vss_to_vhal_mapper/config/typemap.yml (Updated)
+
 BOOLEAN:
   cpp: int32_t
   vhal: int32
@@ -11,6 +12,20 @@ BOOLEAN:
     INT16: (int16_t)(_val_)
     UINT16: (uint16_t)(_val_)
     INT8: (int8_t)(_val_)
+    UINT8: (uint8_t)(_val_)
+    FLOAT: float(_val_)
+
+INT: # Added mapping for generic 'int' VSS datatype to catch 'int' from parser
+  cpp: int32_t
+  vhal: int32
+  from:
+    string: std::stoi(_val_)
+  to:
+    BOOLEAN: bool(_val_)
+    INT32: (_val_)
+    UINT32: (uint32_t)(_val_)
+    INT16: (int16_t)(_val_)
+    UINT16: (uint16_t)(_val_)
     UINT8: (uint8_t)(_val_)
     FLOAT: float(_val_)
 

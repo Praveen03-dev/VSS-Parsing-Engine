@@ -1,4 +1,3 @@
-# Parses .vspec and overlays using vspec-tools and builds SignalNode objects
 import yaml
 import re
 from typing import Dict, Optional, Any, List, Union, Tuple, Iterator, Set

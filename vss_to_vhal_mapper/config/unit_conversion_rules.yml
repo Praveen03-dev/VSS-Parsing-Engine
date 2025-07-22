@@ -1,10 +1,11 @@
-# Unit scaling/multiplier/offset logic
+# vss_to_vhal_mapper/config/unit_conversion_rules.yml (Updated)
+
 # This file defines units supported in the VSS standard catalog
 # and provides conversion rules to a designated base unit for each quantity.
 # The 'to_base_multiplier' and 'to_base_offset' define how to convert a value
 # from this unit TO the base unit: (value * to_base_multiplier) + to_base_offset
 #
-# See VSS documentation for information on syntax and intended content
+# All unit keys are now lowercased to match parsing logic.
 
 # --- Length ---
 # Base Unit: m (meter)
@@ -51,7 +52,7 @@ km/h:
   unit: kilometer per hour
   quantity: velocity
   allowed-datatypes: ['numeric']
-  to_base_multiplier: 0.277778 # 1 km/h = 1000m / 3600s = 1/3.6 m/s
+  to_base_multiplier: 0.277778 # 1 km/h = 1/3.6 m/s
   to_base_offset: 0
 m/s:
   definition: Speed measured in meters per second
@@ -154,22 +155,22 @@ rad/s:
   to_base_offset: 0
 
 # --- Power ---
-# Base Unit: W (watt)
-W:
+# Base Unit: w (watt)
+w: # Lowercased
   definition: Power measured in watts
   unit: watt
   quantity: power
   allowed-datatypes: ['numeric']
   to_base_multiplier: 1 # Base unit
   to_base_offset: 0
-kW:
+kw: # Lowercased
   definition: Power measured in kilowatts
   unit: kilowatt
   quantity: power
   allowed-datatypes: ['numeric']
   to_base_multiplier: 1000 # 1 kW = 1000 W
   to_base_offset: 0
-PS:
+ps: # Lowercased
   definition: Power measured in horsepower (metric)
   unit: horsepower
   quantity: power
@@ -178,15 +179,15 @@ PS:
   to_base_offset: 0
 
 # --- Work (Energy) ---
-# Base Unit: kWh (kilowatt hours)
-kWh:
+# Base Unit: kwh (kilowatt hours)
+kwh: # Lowercased
   definition: Energy consumption measured in kilowatt hours
   unit: kilowatt hours
   quantity: work
   allowed-datatypes: ['numeric']
   to_base_multiplier: 1 # Base unit
   to_base_offset: 0
-Wh:
+wh: # Lowercased
   definition: Energy measured in watt hours
   unit: watt hour
   quantity: work
@@ -219,8 +220,8 @@ lbs:
   to_base_offset: 0
 
 # --- Voltage ---
-# Base Unit: V (volt)
-V:
+# Base Unit: v (volt)
+v: # Lowercased
   definition: Electric potential measured in volts
   unit: volt
   quantity: voltage
@@ -229,8 +230,8 @@ V:
   to_base_offset: 0
 
 # --- Electric Current ---
-# Base Unit: A (ampere)
-A:
+# Base Unit: a (ampere)
+a: # Lowercased
   definition: Electric current measured in amperes
   unit: ampere
   quantity: electric-current
@@ -239,8 +240,8 @@ A:
   to_base_offset: 0
 
 # --- Electric Charge ---
-# Base Unit: Ah (ampere hours)
-Ah:
+# Base Unit: ah (ampere hours)
+ah: # Lowercased
   definition: Electric charge measured in ampere hours
   unit: ampere hours
   quantity: electric-charge
@@ -308,8 +309,6 @@ years:
   to_base_offset: 0
 
 # --- Datetime ---
-# These are format conversions, not linear numeric conversions.
-# The 'to_base_multiplier' and 'to_base_offset' fields are omitted as they are not applicable.
 unix-time:
   definition: Number of non-leap seconds which have passed since 00:00:00 UTC on Thursday, 1 January 1970
   unit: UNIX Timestamp
@@ -322,7 +321,7 @@ iso8601:
   allowed-datatypes: ['string']
 
 # --- Pressure ---
-# Base Unit: kPa (kilopascal)
+# Base Unit: kpa (kilopascal)
 mbar:
   definition: Pressure measured in millibars
   unit: millibar
@@ -330,14 +329,14 @@ mbar:
   allowed-datatypes: ['numeric']
   to_base_multiplier: 0.1 # 1 mbar = 0.1 kPa
   to_base_offset: 0
-Pa:
+pa: # Lowercased
   definition: Pressure measured in pascal
   unit: pascal
   quantity: pressure
   allowed-datatypes: ['numeric']
   to_base_multiplier: 0.001 # 1 Pa = 0.001 kPa
   to_base_offset: 0
-kPa:
+kpa: # Lowercased
   definition: Pressure measured in kilopascal
   unit: kilopascal
   quantity: pressure
@@ -353,7 +352,6 @@ psi:
   to_base_offset: 0
 
 # --- Rating ---
-# No direct numeric conversions as it's a qualitative measure.
 stars:
   definition: Rating measured in stars
   unit: stars
@@ -361,7 +359,6 @@ stars:
   allowed-datatypes: ['numeric']
 
 # --- Mass per time ---
-# Base Unit: g/s (grams per second)
 g/s:
   definition: Mass per time measured in grams per second
   unit: grams per second
@@ -371,7 +368,6 @@ g/s:
   to_base_offset: 0
 
 # --- Mass per distance ---
-# Base Unit: g/km (grams per kilometers)
 g/km:
   definition: Mass per distance measured in grams per kilometers
   unit: grams per kilometer
@@ -381,15 +377,15 @@ g/km:
   to_base_offset: 0
 
 # --- Energy consumption per distance ---
-# Base Unit: Wh/km (watt hours per kilometer)
-kWh/100km:
+# Base Unit: wh/km (watt hours per kilometer)
+kwh/100km: # Lowercased
   definition: Energy consumption per distance measured in kilowatt hours per 100 kilometers
   unit: kilowatt hours per 100 kilometers
   quantity: energy-consumption-per-distance
   allowed-datatypes: ['numeric']
   to_base_multiplier: 10 # 1 kWh/100km = 10 Wh/km
   to_base_offset: 0
-Wh/km:
+wh/km: # Lowercased
   definition: Energy consumption per distance measured in watt hours per kilometer
   unit: watt hour per km
   quantity: energy-consumption-per-distance
@@ -442,15 +438,15 @@ km/l:
   to_base_offset: 0
 
 # --- Force ---
-# Base Unit: N (newton)
-N:
+# Base Unit: n (newton)
+n: # Lowercased
   definition: Force measured in newton
   unit: newton
   quantity: force
   allowed-datatypes: ['numeric']
   to_base_multiplier: 1 # Base unit
   to_base_offset: 0
-kN:
+kn: # Lowercased
   unit: kilo newton
   definition: Force measured in kilo newton
   quantity: force
@@ -459,8 +455,8 @@ kN:
   to_base_offset: 0
 
 # --- Torque ---
-# Base Unit: Nm (newton meter)
-Nm:
+# Base Unit: nm (newton meter)
+nm: # Lowercased
   definition: Torque measured in newton meters
   unit: newton meter
   quantity: torque
@@ -479,8 +475,8 @@ rpm:
   to_base_offset: 0
 
 # --- Frequency ---
-# Base Unit: Hz (Hertz)
-Hz:
+# Base Unit: hz (Hertz)
+hz: # Lowercased
   definition: Frequency measured in hertz
   unit: Hertz
   quantity: frequency
@@ -526,7 +522,7 @@ nm/km:
   # This is a specific ratio, conversion to 'ratio' base might be 1.
   to_base_multiplier: 1 # Assuming 'ratio' is the base for 'relation'
   to_base_offset: 0
-dBm:
+dbm: # Lowercased
   definition: Power level expressed in decibels with reference to one milliwatt
   unit: decibel milliwatt
   quantity: relation
@@ -535,7 +531,7 @@ dBm:
   # For now, treat as base if no other dB unit is defined for a linear scale.
   to_base_multiplier: 1 # Placeholder, complex conversion if needed
   to_base_offset: 0
-dB:
+db: # Lowercased
   definition: Ratio of two values of a physical quantity, usually power or intensity, on a logarithmic scale.
   unit: decibel
   quantity: relation
@@ -545,8 +541,8 @@ dB:
   to_base_offset: 0
 
 # --- Resistance ---
-# Base Unit: Ohm (Ohm)
-Ohm:
+# Base Unit: ohm (Ohm)
+ohm: # Lowercased
   definition: Electrical resistance measured in ohms
   unit: Ohm
   quantity: resistance
