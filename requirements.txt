@@ -1,0 +1,4 @@
+pyyaml
+anytree
+vspec-tools
+fuzzywuzzy

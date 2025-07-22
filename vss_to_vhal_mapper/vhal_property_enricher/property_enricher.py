@@ -1,0 +1,1 @@
+# Applies rules to generate aospId, aospArea, vhal_type, etc.

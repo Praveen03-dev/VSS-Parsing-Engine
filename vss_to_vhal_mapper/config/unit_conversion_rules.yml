@@ -1,0 +1,565 @@
+# Unit scaling/multiplier/offset logic
+# This file defines units supported in the VSS standard catalog
+# and provides conversion rules to a designated base unit for each quantity.
+# The 'to_base_multiplier' and 'to_base_offset' define how to convert a value
+# from this unit TO the base unit: (value * to_base_multiplier) + to_base_offset
+#
+# See VSS documentation for information on syntax and intended content
+
+# --- Length ---
+# Base Unit: m (meter)
+mm:
+  definition: Length measured in millimeters
+  unit: millimeter
+  quantity: length
+  allowed-datatypes: ['numeric']
+  to_base_multiplier: 0.001 # 1 mm = 0.001 m
+  to_base_offset: 0
+cm:
+  definition: Length measured in centimeters
+  unit: centimeter
+  quantity: length
+  allowed-datatypes: ['numeric']
+  to_base_multiplier: 0.01 # 1 cm = 0.01 m
+  to_base_offset: 0
+m:
+  definition: Length measured in meters
+  unit: meter
+  quantity: length
+  allowed-datatypes: ['numeric']
+  to_base_multiplier: 1 # Base unit
+  to_base_offset: 0
+km:
+  definition: Length measured in kilometers
+  unit: kilometer
+  quantity: length
+  allowed-datatypes: ['numeric']
+  to_base_multiplier: 1000 # 1 km = 1000 m
+  to_base_offset: 0
+inch:
+  definition: Distance measured in inches
+  unit: inch
+  quantity: length
+  allowed-datatypes: ['numeric']
+  to_base_multiplier: 0.0254 # 1 inch = 0.0254 m
+  to_base_offset: 0
+
+# --- Velocity ---
+# Base Unit: m/s (meters per second)
+km/h:
+  definition: Velocity measured in kilometers per hours
+  unit: kilometer per hour
+  quantity: velocity
+  allowed-datatypes: ['numeric']
+  to_base_multiplier: 0.277778 # 1 km/h = 1000m / 3600s = 1/3.6 m/s
+  to_base_offset: 0
+m/s:
+  definition: Speed measured in meters per second
+  unit: meters per second
+  quantity: velocity
+  allowed-datatypes: ['numeric']
+  to_base_multiplier: 1 # Base unit
+  to_base_offset: 0
+
+# --- Acceleration ---
+# Base Unit: m/s^2 (meters per second squared)
+m/s^2:
+  definition: Acceleration measured in meters per second squared
+  unit: meters per second squared
+  quantity: acceleration
+  allowed-datatypes: ['numeric']
+  to_base_multiplier: 1 # Base unit
+  to_base_offset: 0
+cm/s^2:
+  definition: Acceleration measured in centimeters per second squared
+  unit: centimeters per second squared
+  quantity: acceleration
+  allowed-datatypes: ['numeric']
+  to_base_multiplier: 0.01 # 1 cm/s^2 = 0.01 m/s^2
+  to_base_offset: 0
+
+# --- Volume ---
+# Base Unit: l (liter)
+ml:
+  definition: Volume measured in milliliters
+  unit: milliliter
+  quantity: volume
+  allowed-datatypes: ['numeric']
+  to_base_multiplier: 0.001 # 1 ml = 0.001 l
+  to_base_offset: 0
+l:
+  definition: Volume measured in liters
+  unit: liter
+  quantity: volume
+  allowed-datatypes: ['numeric']
+  to_base_multiplier: 1 # Base unit
+  to_base_offset: 0
+cm^3:
+  definition: Volume measured in cubic centimeters
+  unit: cubic centimeters
+  quantity: volume
+  allowed-datatypes: ['numeric']
+  to_base_multiplier: 0.001 # 1 cm^3 = 0.001 l
+  to_base_offset: 0
+
+# --- Temperature ---
+# Base Unit: celsius (degree celsius)
+celsius:
+  definition: Temperature measured in degree celsius
+  unit: degree celsius
+  quantity: temperature
+  allowed-datatypes: ['numeric']
+  to_base_multiplier: 1 # Base unit
+  to_base_offset: 0
+fahrenheit:
+  definition: Temperature measured in degree fahrenheit
+  unit: degree fahrenheit
+  quantity: temperature
+  allowed-datatypes: ['numeric']
+  to_base_multiplier: 0.5555555555555556 # 5/9
+  to_base_offset: -17.77777777777778 # -32 * 5/9
+
+# --- Angle ---
+# Base Unit: degrees
+degrees:
+  definition: Angle measured in degrees
+  unit: degree
+  quantity: angle
+  allowed-datatypes: ['numeric']
+  to_base_multiplier: 1 # Base unit
+  to_base_offset: 0
+radians:
+  definition: Angle measured in radians
+  unit: radian
+  quantity: angle
+  allowed-datatypes: ['numeric']
+  to_base_multiplier: 57.29577951308232 # 180/pi
+  to_base_offset: 0
+
+# --- Angular Speed ---
+# Base Unit: rad/s (radians per second)
+degrees/s:
+  definition: Angular speed measured in degrees per second
+  unit: degree per second
+  quantity: angular-speed
+  allowed-datatypes: ['numeric']
+  to_base_multiplier: 0.017453292519943295 # pi/180
+  to_base_offset: 0
+rad/s:
+  definition: Angular speed measured in radians per second
+  unit: radians per second
+  quantity: angular-speed
+  allowed-datatypes: ['numeric']
+  to_base_multiplier: 1 # Base unit
+  to_base_offset: 0
+
+# --- Power ---
+# Base Unit: W (watt)
+W:
+  definition: Power measured in watts
+  unit: watt
+  quantity: power
+  allowed-datatypes: ['numeric']
+  to_base_multiplier: 1 # Base unit
+  to_base_offset: 0
+kW:
+  definition: Power measured in kilowatts
+  unit: kilowatt
+  quantity: power
+  allowed-datatypes: ['numeric']
+  to_base_multiplier: 1000 # 1 kW = 1000 W
+  to_base_offset: 0
+PS:
+  definition: Power measured in horsepower (metric)
+  unit: horsepower
+  quantity: power
+  allowed-datatypes: ['numeric']
+  to_base_multiplier: 735.49875 # 1 PS = 735.49875 W
+  to_base_offset: 0
+
+# --- Work (Energy) ---
+# Base Unit: kWh (kilowatt hours)
+kWh:
+  definition: Energy consumption measured in kilowatt hours
+  unit: kilowatt hours
+  quantity: work
+  allowed-datatypes: ['numeric']
+  to_base_multiplier: 1 # Base unit
+  to_base_offset: 0
+Wh:
+  definition: Energy measured in watt hours
+  unit: watt hour
+  quantity: work
+  allowed-datatypes: ['numeric']
+  to_base_multiplier: 0.001 # 1 Wh = 0.001 kWh
+  to_base_offset: 0
+
+# --- Mass ---
+# Base Unit: kg (kilogram)
+g:
+  definition: Mass measured in grams
+  unit: gram
+  quantity: mass
+  allowed-datatypes: ['numeric']
+  to_base_multiplier: 0.001 # 1 g = 0.001 kg
+  to_base_offset: 0
+kg:
+  definition: Mass measured in kilograms
+  unit: kilogram
+  quantity: mass
+  allowed-datatypes: ['numeric']
+  to_base_multiplier: 1 # Base unit
+  to_base_offset: 0
+lbs:
+  definition: Mass measured in pounds
+  unit: pound
+  quantity: mass
+  allowed-datatypes: ['numeric']
+  to_base_multiplier: 0.453592 # 1 lbs = 0.453592 kg
+  to_base_offset: 0
+
+# --- Voltage ---
+# Base Unit: V (volt)
+V:
+  definition: Electric potential measured in volts
+  unit: volt
+  quantity: voltage
+  allowed-datatypes: ['numeric']
+  to_base_multiplier: 1 # Base unit
+  to_base_offset: 0
+
+# --- Electric Current ---
+# Base Unit: A (ampere)
+A:
+  definition: Electric current measured in amperes
+  unit: ampere
+  quantity: electric-current
+  allowed-datatypes: ['numeric']
+  to_base_multiplier: 1 # Base unit
+  to_base_offset: 0
+
+# --- Electric Charge ---
+# Base Unit: Ah (ampere hours)
+Ah:
+  definition: Electric charge measured in ampere hours
+  unit: ampere hours
+  quantity: electric-charge
+  allowed-datatypes: ['numeric']
+  to_base_multiplier: 1 # Base unit
+  to_base_offset: 0
+
+# --- Duration ---
+# Base Unit: s (second)
+ms:
+  definition: Duration measured in milliseconds
+  unit: millisecond
+  quantity: duration
+  allowed-datatypes: ['numeric']
+  to_base_multiplier: 0.001 # 1 ms = 0.001 s
+  to_base_offset: 0
+s:
+  definition: Duration measured in seconds
+  unit: second
+  quantity: duration
+  allowed-datatypes: ['numeric']
+  to_base_multiplier: 1 # Base unit
+  to_base_offset: 0
+min:
+  unit: minute
+  definition: Duration measured in minutes
+  quantity: duration
+  allowed-datatypes: ['numeric']
+  to_base_multiplier: 60 # 1 min = 60 s
+  to_base_offset: 0
+h:
+  definition: Duration measured in hours
+  unit: hour
+  quantity: duration
+  allowed-datatypes: ['numeric']
+  to_base_multiplier: 3600 # 1 h = 3600 s
+  to_base_offset: 0
+day:
+  definition: Duration measured in days
+  unit: days
+  quantity: duration
+  allowed-datatypes: ['numeric']
+  to_base_multiplier: 86400 # 1 day = 24 * 3600 s
+  to_base_offset: 0
+weeks:
+  definition: Duration measured in weeks
+  unit: weeks
+  quantity: duration
+  allowed-datatypes: ['numeric']
+  to_base_multiplier: 604800 # 1 week = 7 * 86400 s
+  to_base_offset: 0
+months:
+  definition: Duration measured in months (approximate, based on 30.44 days/month)
+  unit: months
+  quantity: duration
+  allowed-datatypes: ['numeric']
+  to_base_multiplier: 2629743 # 1 month = 30.44 * 86400 s (approx)
+  to_base_offset: 0
+years:
+  definition: Duration measured in years (approximate, based on 365.25 days/year)
+  unit: years
+  quantity: duration
+  allowed-datatypes: ['numeric']
+  to_base_multiplier: 31557600 # 1 year = 365.25 * 86400 s (approx)
+  to_base_offset: 0
+
+# --- Datetime ---
+# These are format conversions, not linear numeric conversions.
+# The 'to_base_multiplier' and 'to_base_offset' fields are omitted as they are not applicable.
+unix-time:
+  definition: Number of non-leap seconds which have passed since 00:00:00 UTC on Thursday, 1 January 1970
+  unit: UNIX Timestamp
+  quantity: datetime
+  allowed-datatypes: ['uint32','uint64','int64']
+iso8601:
+  definition: Date and Time expressed as a string according to ISO 8601
+  unit: ISO 8601
+  quantity: datetime
+  allowed-datatypes: ['string']
+
+# --- Pressure ---
+# Base Unit: kPa (kilopascal)
+mbar:
+  definition: Pressure measured in millibars
+  unit: millibar
+  quantity: pressure
+  allowed-datatypes: ['numeric']
+  to_base_multiplier: 0.1 # 1 mbar = 0.1 kPa
+  to_base_offset: 0
+Pa:
+  definition: Pressure measured in pascal
+  unit: pascal
+  quantity: pressure
+  allowed-datatypes: ['numeric']
+  to_base_multiplier: 0.001 # 1 Pa = 0.001 kPa
+  to_base_offset: 0
+kPa:
+  definition: Pressure measured in kilopascal
+  unit: kilopascal
+  quantity: pressure
+  allowed-datatypes: ['numeric']
+  to_base_multiplier: 1 # Base unit
+  to_base_offset: 0
+psi:
+  definition: Pressure measured in pounds per square inch
+  unit: pounds per square inch
+  quantity: pressure
+  allowed-datatypes: ['numeric']
+  to_base_multiplier: 6.89476 # 1 psi = 6.89476 kPa
+  to_base_offset: 0
+
+# --- Rating ---
+# No direct numeric conversions as it's a qualitative measure.
+stars:
+  definition: Rating measured in stars
+  unit: stars
+  quantity: rating
+  allowed-datatypes: ['numeric']
+
+# --- Mass per time ---
+# Base Unit: g/s (grams per second)
+g/s:
+  definition: Mass per time measured in grams per second
+  unit: grams per second
+  quantity: mass-per-time
+  allowed-datatypes: ['numeric']
+  to_base_multiplier: 1 # Base unit
+  to_base_offset: 0
+
+# --- Mass per distance ---
+# Base Unit: g/km (grams per kilometers)
+g/km:
+  definition: Mass per distance measured in grams per kilometers
+  unit: grams per kilometer
+  quantity: mass-per-distance
+  allowed-datatypes: ['numeric']
+  to_base_multiplier: 1 # Base unit
+  to_base_offset: 0
+
+# --- Energy consumption per distance ---
+# Base Unit: Wh/km (watt hours per kilometer)
+kWh/100km:
+  definition: Energy consumption per distance measured in kilowatt hours per 100 kilometers
+  unit: kilowatt hours per 100 kilometers
+  quantity: energy-consumption-per-distance
+  allowed-datatypes: ['numeric']
+  to_base_multiplier: 10 # 1 kWh/100km = 10 Wh/km
+  to_base_offset: 0
+Wh/km:
+  definition: Energy consumption per distance measured in watt hours per kilometer
+  unit: watt hour per km
+  quantity: energy-consumption-per-distance
+  allowed-datatypes: ['numeric']
+  to_base_multiplier: 1 # Base unit
+  to_base_offset: 0
+
+# --- Volume per distance ---
+# Base Unit: l/100km (liters per 100 kilometers)
+ml/100km:
+  definition: Volume per distance measured in milliliters per 100 kilometers
+  unit: milliliter per 100 kilometers
+  quantity: volume-per-distance
+  allowed-datatypes: ['numeric']
+  to_base_multiplier: 0.001 # 1 ml/100km = 0.001 l/100km
+  to_base_offset: 0
+l/100km:
+  definition: Volume per distance measured in liters per 100 kilometers
+  unit: liter per 100 kilometers
+  quantity: volume-per-distance
+  allowed-datatypes: ['numeric']
+  to_base_multiplier: 1 # Base unit
+  to_base_offset: 0
+
+# --- Volume flow rate ---
+# Base Unit: l/h (liters per hour)
+l/h:
+  definition: Flow measured in liters per hour
+  unit: liter per hour
+  quantity: volume-flow-rate
+  allowed-datatypes: ['numeric']
+  to_base_multiplier: 1 # Base unit
+  to_base_offset: 0
+
+# --- Distance per volume ---
+# Base Unit: km/l (kilometers per liter)
+mpg:
+  definition: Distance per volume measured in miles per gallon
+  unit: miles per gallon
+  quantity: distance-per-volume
+  allowed-datatypes: ['numeric']
+  to_base_multiplier: 0.425143707 # 1 mpg = 0.425143707 km/l
+  to_base_offset: 0
+km/l:
+  definition: Distance per volume measured in kilometers per liter
+  unit: kilometers per liter
+  quantity: distance-per-volume
+  allowed-datatypes: ['numeric']
+  to_base_multiplier: 1 # Base unit
+  to_base_offset: 0
+
+# --- Force ---
+# Base Unit: N (newton)
+N:
+  definition: Force measured in newton
+  unit: newton
+  quantity: force
+  allowed-datatypes: ['numeric']
+  to_base_multiplier: 1 # Base unit
+  to_base_offset: 0
+kN:
+  unit: kilo newton
+  definition: Force measured in kilo newton
+  quantity: force
+  allowed-datatypes: ['numeric']
+  to_base_multiplier: 1000 # 1 kN = 1000 N
+  to_base_offset: 0
+
+# --- Torque ---
+# Base Unit: Nm (newton meter)
+Nm:
+  definition: Torque measured in newton meters
+  unit: newton meter
+  quantity: torque
+  allowed-datatypes: ['numeric']
+  to_base_multiplier: 1 # Base unit
+  to_base_offset: 0
+
+# --- Rotational Speed ---
+# Base Unit: rpm (revolutions per minute)
+rpm:
+  definition: Rotational speed measured in revolutions per minute
+  unit: revolutions per minute
+  quantity: rotational-speed
+  allowed-datatypes: ['numeric']
+  to_base_multiplier: 1 # Base unit
+  to_base_offset: 0
+
+# --- Frequency ---
+# Base Unit: Hz (Hertz)
+Hz:
+  definition: Frequency measured in hertz
+  unit: Hertz
+  quantity: frequency
+  allowed-datatypes: ['numeric']
+  to_base_multiplier: 1 # Base unit
+  to_base_offset: 0
+cpm:
+  definition: Number of cycles per minute
+  unit: cycles per minute
+  quantity: frequency
+  allowed-datatypes: ['numeric']
+  to_base_multiplier: 0.016666666666666666 # 1/60 Hz
+  to_base_offset: 0
+bpm:
+  definition: Number of human heart beats per minute
+  unit: beats per minute
+  quantity: frequency
+  allowed-datatypes: ['numeric']
+  to_base_multiplier: 0.016666666666666666 # 1/60 Hz
+  to_base_offset: 0
+
+# --- Relation ---
+# These are often unitless or specific ratios. Multipliers/offsets may only apply to 'percent' to 'ratio'.
+ratio:
+  definition: Relation measured as ratio
+  unit: ratio
+  quantity: relation
+  allowed-datatypes: ['numeric']
+  to_base_multiplier: 1 # Base unit (unitless)
+  to_base_offset: 0
+percent:
+  definition: Relation measured in percent
+  unit: percent
+  quantity: relation
+  allowed-datatypes: ['numeric']
+  to_base_multiplier: 0.01 # 1 percent = 0.01 ratio
+  to_base_offset: 0
+nm/km:
+  definition: nm/km
+  unit: nano meter per kilometer
+  quantity: relation
+  allowed-datatypes: ['numeric']
+  # This is a specific ratio, conversion to 'ratio' base might be 1.
+  to_base_multiplier: 1 # Assuming 'ratio' is the base for 'relation'
+  to_base_offset: 0
+dBm:
+  definition: Power level expressed in decibels with reference to one milliwatt
+  unit: decibel milliwatt
+  quantity: relation
+  allowed-datatypes: ['numeric']
+  # dBm is logarithmic, direct linear conversion to 'ratio' is not straightforward without context.
+  # For now, treat as base if no other dB unit is defined for a linear scale.
+  to_base_multiplier: 1 # Placeholder, complex conversion if needed
+  to_base_offset: 0
+dB:
+  definition: Ratio of two values of a physical quantity, usually power or intensity, on a logarithmic scale.
+  unit: decibel
+  quantity: relation
+  allowed-datatypes: ['numeric']
+  # dB is logarithmic, direct linear conversion to 'ratio' is not straightforward without context.
+  to_base_multiplier: 1 # Placeholder, complex conversion if needed
+  to_base_offset: 0
+
+# --- Resistance ---
+# Base Unit: Ohm (Ohm)
+Ohm:
+  definition: Electrical resistance measured in ohms
+  unit: Ohm
+  quantity: resistance
+  allowed-datatypes: ['numeric']
+  to_base_multiplier: 1 # Base unit
+  to_base_offset: 0
+
+# --- Illuminance ---
+# Base Unit: lx (lux)
+lx:
+  definition: Light intensity in Lux
+  unit: lux
+  quantity: illuminance
+  allowed-datatypes: ['numeric']
+  to_base_multiplier: 1 # Base unit
+  to_base_offset: 0

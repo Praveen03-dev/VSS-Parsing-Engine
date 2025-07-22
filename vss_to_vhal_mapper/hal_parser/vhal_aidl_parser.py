@@ -1,0 +1,1 @@
+# Parses VehicleProperty.aidl to extract AOSP property names and types
