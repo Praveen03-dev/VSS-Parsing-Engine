@@ -1,0 +1,133 @@
+/*
+ * Copyright (C) 2024 The Android Open Source Project
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#pragma once
+
+#include "VehicleEmulator.h"
+#include "AndroidVssConverter.h"
+#include "VssSocketComm.h"
+
+#include <memory>
+#include <string>
+
+namespace android {
+namespace hardware {
+namespace automotive {
+namespace vehicle {
+namespace V2_0 {
+namespace impl {
+
+// Forward declarations
+class VssSocketComm;
+class AndroidVssConverter;
+
+/**
+ * Abstract interface for processing VSS messages.
+ * Classes implementing this interface can receive and process
+ * VSS messages from communication channels.
+ */
+class VssMessageProcessor {
+public:
+    virtual ~VssMessageProcessor() = default;
+    
+    /**
+     * Process a VSS message received from a communication channel.
+     * @param message Raw VSS message string (e.g., "Vehicle.Speed=120.5")
+     */
+    virtual void processVssMessage(const std::string& message) = 0;
+};
+
+/**
+ * VSS Vehicle Emulator that extends the standard VehicleEmulator
+ * with VSS message processing capabilities. This class serves as
+ * the heart of the VSS-enabled VHAL implementation.
+ * 
+ * It orchestrates the entire VSS to VHAL conversion process by:
+ * 1. Setting up communication channels (like VssSocketComm)
+ * 2. Processing incoming VSS messages 
+ * 3. Converting VSS data to VHAL format using AndroidVssConverter
+ * 4. Updating the internal VHAL property store
+ */
+class VssVehicleEmulator : public VehicleEmulator, public VssMessageProcessor {
+public:
+    VssVehicleEmulator(VehicleHalManager* vhalManager);
+    ~VssVehicleEmulator() override;
+
+    // VehicleEmulator interface
+    void doSetValueFromClient(const VehiclePropValue& propValue) override;
+    void doGetConfig(VehiclePropConfig* config) const override;
+    void doGetConfigNoLock(VehiclePropConfig* config) const override;
+    VehiclePropValue doGetProperty(const VehiclePropValue& request) const override;
+    StatusCode doSetProperty(const VehiclePropValue& propValue) const override;
+
+    // VssMessageProcessor interface
+    void processVssMessage(const std::string& message) override;
+    
+    /**
+     * Initialize the VSS emulator system, including communication channels.
+     * @return true if initialization was successful, false otherwise
+     */
+    bool initialize();
+    
+    /**
+     * Shutdown the VSS emulator system and cleanup resources.
+     */
+    void shutdown();
+    
+    /**
+     * Check if the VSS emulator is currently active.
+     * @return true if active and processing messages, false otherwise
+     */
+    bool isActive() const;
+
+private:
+    /**
+     * Parse a raw VSS message string into path and value components.
+     * @param message Raw message string (e.g., "Vehicle.Speed=120.5")
+     * @param vssPath Output parameter for the VSS path ("Vehicle.Speed")
+     * @param vssValue Output parameter for the VSS value ("120.5")
+     * @return true if parsing was successful, false otherwise
+     */
+    bool parseVssMessage(const std::string& message, std::string& vssPath, std::string& vssValue);
+    
+    /**
+     * Update the VHAL property store with a converted VehiclePropValue.
+     * @param propValue The converted VHAL property value to update
+     * @return true if the update was successful, false otherwise
+     */
+    bool updateVhalProperty(const VehiclePropValue& propValue);
+
+    // Core components
+    std::unique_ptr<AndroidVssConverter> mVssConverter;
+    std::unique_ptr<VssSocketComm> mSocketComm;
+    
+    // State management
+    mutable std::mutex mVssLock;
+    bool mInitialized;
+    bool mActive;
+    
+    // Statistics for debugging
+    mutable std::atomic<uint64_t> mMessagesProcessed{0};
+    mutable std::atomic<uint64_t> mMessagesConverted{0};
+    mutable std::atomic<uint64_t> mConversionErrors{0};
+};
+
+}  // namespace impl
+}  // namespace V2_0
+}  // namespace vehicle
+}  // namespace automotive
+}  // namespace hardware
+}  // namespace android

@@ -16,20 +16,34 @@ class VHALGenerator:
         # Files to be generated
         self.generated_files = {
             'types.hal.jinja2': 'types.hal',
-            'DefaultConfig.h.jinja2': 'default/impl/vhal_v2_0/DefaultConfig.h',
-            'PropertyUtils.h.jinja2': 'default/impl/vhal_v2_0/PropertyUtils.h',
-            'PropertyUtils.cpp.jinja2': 'default/impl/vhal_v2_0/PropertyUtils.cpp',
+            'DefaultConfig.h.jinja2': 'impl/DefaultConfig.h',
+            'PropertyUtils.h.jinja2': 'impl/PropertyUtils.h',
+            'PropertyUtils.cpp.jinja2': 'src/PropertyUtils.cpp',
             'Android.bp.jinja2': 'Android.bp',
-            'VehicleService.cpp.jinja2': 'default/VehicleService.cpp'
+            'VehicleService.cpp.jinja2': 'src/VehicleService.cpp'
         }
 
         # Manual implementation templates (now treated as Jinja2 templates)
         self.manual_templates = {
-            'DefaultVehicleHal.h.jinja2': 'default/impl/vhal_v2_0/DefaultVehicleHal.h',
-            'DefaultVehicleHal.cpp.jinja2': 'default/impl/vhal_v2_0/DefaultVehicleHal.cpp',
-            'MockSensor.h.jinja2': 'default/impl/vhal_v2_0/MockSensor.h',
-            'MockActuator.h.jinja2': 'default/impl/vhal_v2_0/MockActuator.h',
-            'SubscriptionManager.h.jinja2': 'default/impl/vhal_v2_0/SubscriptionManager.h'
+            'DefaultVehicleHal.h.jinja2': 'impl/DefaultVehicleHal.h',
+            'DefaultVehicleHal.cpp.jinja2': 'src/DefaultVehicleHal.cpp',
+            'MockSensor.h.jinja2': 'impl/MockSensor.h',
+            'MockActuator.h.jinja2': 'impl/MockActuator.h',
+            'SubscriptionManager.h.jinja2': 'impl/SubscriptionManager.h'
+        }
+        
+        # VSS Converter files (new dynamic conversion system)
+        self.vss_converter_files = {
+            'VssVehicleEmulator.h.jinja2': 'impl/VssVehicleEmulator.h',
+            'VssVehicleEmulator.cpp.jinja2': 'src/VssVehicleEmulator.cpp',
+            'VssCommConn.h.jinja2': 'impl/VssCommConn.h',
+            'VssCommConn.cpp.jinja2': 'src/VssCommConn.cpp',
+            'VssSocketComm.h.jinja2': 'impl/VssSocketComm.h',
+            'VssSocketComm.cpp.jinja2': 'src/VssSocketComm.cpp',
+            'AndroidVssConverter.h.jinja2': 'impl/AndroidVssConverter.h',
+            'AndroidVssConverter.cpp.jinja2': 'src/AndroidVssConverter.cpp',
+            'ConverterUtils.h.jinja2': 'impl/ConverterUtils.h',
+            'ConverterUtils.cpp.jinja2': 'src/ConverterUtils.cpp'
         }
 
     def load_signals(self):
@@ -109,8 +123,8 @@ class VHALGenerator:
         static_files_map = {
             'IVehicle.hal': 'IVehicle.hal',
             'IVehicleCallback.hal': 'IVehicleCallback.hal',
-            'service.rc': 'default/android.hardware.automotive.vehicle@2.0-default-service.rc',
-            'service.xml': 'default/android.hardware.automotive.vehicle@2.0-default-service.xml'
+            'service.rc': 'android.hardware.automotive.vehicle@2.0-default-service.rc',
+            'service.xml': 'android.hardware.automotive.vehicle@2.0-default-service.xml'
         }
         
         for src_file, dest_path in static_files_map.items():
@@ -144,14 +158,72 @@ class VHALGenerator:
                 if os.path.exists(template_path):
                     shutil.copy2(template_path, output_path)
                     print(f"Copied static template: {output_filename}")
+    
+    def _extract_conversion_data(self):
+        """Extract VSS to VHAL conversion data for dynamic converter generation"""
+        conversion_mappings = []
+        
+        signal_items = self.signals.items() if isinstance(self.signals, dict) else enumerate(self.signals)
+        
+        for path_or_idx, signal in signal_items:
+            # Only process signals that have VHAL mappings and are not branch nodes
+            if (signal.get('vhal_id_base', 'UNKNOWN') != 'UNKNOWN' and
+                signal.get('node_type', '') not in ['branch'] and
+                signal.get('datatype') and signal.get('vhal_type')):
+                
+                conversion_data = {
+                    'vss_path': signal.get('path', path_or_idx if isinstance(path_or_idx, str) else ''),
+                    'vhal_property_id': signal.get('vhal_id_base', ''),
+                    'vss_datatype': signal.get('datatype', ''),
+                    'vhal_type': signal.get('vhal_type', 'MIXED'),
+                    'unit': signal.get('unit', ''),
+                    'unit_multiplier': signal.get('unit_multiplier', 1.0),
+                    'unit_offset': signal.get('unit_offset', 0.0),
+                    'min_value': signal.get('min_value'),
+                    'max_value': signal.get('max_value'),
+                    'initial_value': signal.get('initial_value'),
+                    'vhal_access': signal.get('vhal_access', 'READ'),
+                    'vhal_area': signal.get('vhal_area', 'GLOBAL'),
+                    'vhal_change_mode': signal.get('vhal_change_mode', 'ON_CHANGE'),
+                    'description': signal.get('description', '')
+                }
+                conversion_mappings.append(conversion_data)
+        
+        print(f"Generated {len(conversion_mappings)} VSS to VHAL conversion mappings")
+        return conversion_mappings
+    
+    def _generate_vss_converter_files(self, output_dir: str, context: dict):
+        """Generate VSS converter system files"""
+        print("\nGenerating VSS converter system...")
+        
+        # Extract conversion data for the converter
+        conversion_mappings = self._extract_conversion_data()
+        converter_context = {
+            **context,
+            'conversion_mappings': conversion_mappings,
+            'total_signals': len(conversion_mappings)
+        }
+        
+        for template_name, output_filename in self.vss_converter_files.items():
+            output_path = os.path.join(output_dir, output_filename)
+            try:
+                template = self.jinja_env.get_template(f'vss_converter/{template_name}')
+                content = template.render(converter_context)
+                os.makedirs(os.path.dirname(output_path), exist_ok=True)
+                with open(output_path, 'w') as f:
+                    f.write(content)
+                print(f"Generated VSS converter: {output_filename}")
+            except Exception as e:
+                print(f"Warning: Could not generate VSS converter {template_name}: {e}")
 
     def generate_vhal_files(self, output_dir: str):
-        """Generate VHAL files"""
+        """Generate VHAL files including the VSS converter system"""
         print("\nGenerating VHAL files...")
         os.makedirs(output_dir, exist_ok=True)
         properties = self._extract_property_data()
         context = {'properties': properties, 'vss_file_path': self.json_file}
 
+        # Generate core VHAL files
         for template_name, output_name in self.generated_files.items():
             template = self.jinja_env.get_template(template_name)
             content = template.render(context)
@@ -161,6 +233,18 @@ class VHALGenerator:
                 f.write(content)
             print(f"Generated {output_name}")
 
+        # Generate VSS converter system
+        self._generate_vss_converter_files(output_dir, context)
+        
+        # Copy static files and generate manual templates
         self._copy_static_files(output_dir)
         self._generate_manual_files(output_dir, context)
-        print("VHAL files generation complete.")
+        
+        print("\n" + "="*70)
+        print("VHAL files generation complete!")
+        print("Generated components:")
+        print("  • Core VHAL files (types.hal, DefaultConfig.h, etc.)")
+        print("  • VSS converter system (VssVehicleEmulator, AndroidVssConverter, etc.)")
+        print("  • Communication layer (VssSocketComm, VssCommConn)")
+        print("  • Enhanced manual implementations")
+        print("="*70)

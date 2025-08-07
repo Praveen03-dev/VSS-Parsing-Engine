@@ -1,0 +1,70 @@
+/*
+ * Copyright (C) 2024 The Android Open Source Project
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#pragma once
+
+#include "VssCommConn.h"
+
+#include <string>
+#include <atomic>
+#include <memory>
+
+namespace android {
+namespace hardware {
+namespace automotive {
+namespace vehicle {
+namespace V2_0 {
+namespace impl {
+
+/**
+ * Socket-based implementation of VSS communication.
+ * This class manages network communication over TCP sockets
+ * to receive VSS messages from external data providers.
+ */
+class VssSocketComm : public VssCommConn {
+public:
+    static constexpr int DEFAULT_VSS_PORT = 33445;
+    static constexpr int SOCKET_TIMEOUT_SEC = 5;
+    static constexpr size_t BUFFER_SIZE = 1024;
+
+    explicit VssSocketComm(std::shared_ptr<VssMessageProcessor> processor, 
+                           int port = DEFAULT_VSS_PORT);
+    ~VssSocketComm() override;
+
+    // VssCommConn interface implementation
+    bool start() override;
+    void stop() override;
+    bool isRunning() const override;
+
+private:
+    void readLoop() override;
+    bool setupServerSocket();
+    void closeSocket();
+    bool acceptConnection();
+    std::string readMessage();
+
+    int mPort;
+    int mServerSocket;
+    int mClientSocket;
+    std::atomic<bool> mHasActiveConnection{false};
+};
+
+}  // namespace impl
+}  // namespace V2_0
+}  // namespace vehicle
+}  // namespace automotive
+}  // namespace hardware
+}  // namespace android

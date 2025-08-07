@@ -1,0 +1,259 @@
+/*
+ * Copyright (C) 2024 The Android Open Source Project
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#define LOG_TAG "AndroidVssConverter"
+
+#include "AndroidVssConverter.h"
+#include "ConverterUtils.h"
+
+#include <android-base/logging.h>
+#include <android/hardware/automotive/vehicle/2.0/types.h>
+#include <sstream>
+#include <cmath>
+#include <limits>
+
+namespace android {
+namespace hardware {
+namespace automotive {
+namespace vehicle {
+namespace V2_0 {
+namespace impl {
+
+using ::android::hardware::automotive::vehicle::V2_0::VehiclePropertyType;
+using ::android::hardware::automotive::vehicle::V2_0::VehicleArea;
+
+AndroidVssConverter::AndroidVssConverter() : mInitialized(false) {
+    LOG(INFO) << "AndroidVssConverter constructed";
+}
+
+AndroidVssConverter::~AndroidVssConverter() {
+    LOG(INFO) << "AndroidVssConverter destroyed";
+}
+
+bool AndroidVssConverter::initialize() {
+    if (mInitialized) {
+        LOG(WARNING) << "AndroidVssConverter already initialized";
+        return true;
+    }
+
+    LOG(INFO) << "Initializing AndroidVssConverter...";
+    
+    try {
+        // Initialize the conversion mapping with generated data
+        initConversionMap();
+        
+        mInitialized = true;
+        LOG(INFO) << "AndroidVssConverter initialized successfully with " 
+                  << mConversionMap.size() << " conversion mappings";
+        return true;
+        
+    } catch (const std::exception& e) {
+        LOG(ERROR) << "Failed to initialize AndroidVssConverter: " << e.what();
+        return false;
+    }
+}
+
+bool AndroidVssConverter::convertVssToVhal(const std::string& vssPath, 
+                                           const std::string& vssValue, 
+                                           VehiclePropValue& vhalPropValue) {
+    if (!mInitialized) {
+        LOG(ERROR) << "AndroidVssConverter not initialized";
+        return false;
+    }
+
+    auto it = mConversionMap.find(vssPath);
+    if (it == mConversionMap.end()) {
+        LOG(WARNING) << "No conversion mapping found for VSS path: " << vssPath;
+        return false;
+    }
+
+    try {
+        // Call the specific conversion function for this VSS path
+        bool success = it->second(vssValue, vhalPropValue);
+        
+        if (success) {
+            LOG(VERBOSE) << "Successfully converted VSS " << vssPath << "=" << vssValue 
+                        << " to VHAL property " << std::hex << vhalPropValue.prop;
+        } else {
+            LOG(WARNING) << "Conversion function failed for VSS " << vssPath << "=" << vssValue;
+        }
+        
+        return success;
+        
+    } catch (const std::exception& e) {
+        LOG(ERROR) << "Exception during VSS to VHAL conversion for " << vssPath 
+                  << ": " << e.what();
+        return false;
+    }
+}
+
+bool AndroidVssConverter::hasMapping(const std::string& vssPath) const {
+    return mConversionMap.find(vssPath) != mConversionMap.end();
+}
+
+size_t AndroidVssConverter::getMappingCount() const {
+    return mConversionMap.size();
+}
+
+int32_t AndroidVssConverter::getVhalPropertyId(const std::string& vssPath) const {
+    auto it = mVssToVhalIdMap.find(vssPath);
+    return (it != mVssToVhalIdMap.end()) ? it->second : 0;
+}
+
+VehiclePropValue AndroidVssConverter::createPropValue(int32_t propertyId, int32_t areaId) {
+    VehiclePropValue propValue;
+    ConverterUtils::initializeProp(propValue, propertyId, areaId);
+    return propValue;
+}
+
+void AndroidVssConverter::initConversionMap() {
+    LOG(INFO) << "Initializing VSS to VHAL conversion mappings...";
+
+    {% if conversion_mappings %}
+    // Generated conversion mappings from Python tool
+    // Total mappings: {{ conversion_mappings|length }}
+    
+    {% for mapping in conversion_mappings %}
+    // VSS: {{ mapping.vss_path }} -> VHAL: {{ mapping.vhal_property_id }} ({{ mapping.vhal_type }})
+    mConversionMap["{{ mapping.vss_path }}"] = [this](const std::string& value, VehiclePropValue& propValue) -> bool {
+        return convert{{ mapping.vss_path|replace('.', '_')|replace('[', '_')|replace(']', '_') }}(value, propValue);
+    };
+    mVssToVhalIdMap["{{ mapping.vss_path }}"] = {{ mapping.vhal_property_id }};
+    
+    {% endfor %}
+    
+    LOG(INFO) << "Initialized " << mConversionMap.size() << " VSS to VHAL mappings";
+    
+    {% else %}
+    LOG(WARNING) << "No conversion mappings provided - converter will be empty";
+    {% endif %}
+}
+
+{% for mapping in conversion_mappings %}
+// Conversion function for {{ mapping.vss_path }}
+// VSS Type: {{ mapping.vss_datatype }} -> VHAL Type: {{ mapping.vhal_type }}
+// Property ID: {{ mapping.vhal_property_id }}
+{% if mapping.unit and mapping.unit != mapping.vss_path.split('.')[-1] %}// Unit conversion: {{ mapping.unit }}{% if mapping.unit_multiplier != 1.0 %} (×{{ mapping.unit_multiplier }}){% endif %}{% if mapping.unit_offset != 0.0 %} (+{{ mapping.unit_offset }}){% endif %}{% endif %}
+bool AndroidVssConverter::convert{{ mapping.vss_path|replace('.', '_')|replace('[', '_')|replace(']', '_') }}(
+    const std::string& value, VehiclePropValue& propValue) {
+    
+    propValue = createPropValue({{ mapping.vhal_property_id }});
+    
+    try {
+        {% if mapping.vhal_type == 'FLOAT' %}
+        // Convert to float with unit scaling
+        float floatValue = ConverterUtils::stringToFloat(value);
+        {% if mapping.unit_multiplier != 1.0 %}
+        floatValue *= {{ mapping.unit_multiplier }}f;
+        {% endif %}
+        {% if mapping.unit_offset != 0.0 %}
+        floatValue += {{ mapping.unit_offset }}f;
+        {% endif %}
+        {% if mapping.min_value is not none %}
+        if (floatValue < {{ mapping.min_value }}f) {
+            LOG(WARNING) << "Value " << floatValue << " below minimum {{ mapping.min_value }} for {{ mapping.vss_path }}";
+            floatValue = {{ mapping.min_value }}f;
+        }
+        {% endif %}
+        {% if mapping.max_value is not none %}
+        if (floatValue > {{ mapping.max_value }}f) {
+            LOG(WARNING) << "Value " << floatValue << " above maximum {{ mapping.max_value }} for {{ mapping.vss_path }}";
+            floatValue = {{ mapping.max_value }}f;
+        }
+        {% endif %}
+        ConverterUtils::setFloatValue(propValue, floatValue);
+        
+        {% elif mapping.vhal_type == 'INT32' %}
+        // Convert to int32
+        int32_t intValue = ConverterUtils::stringToInt32(value);
+        {% if mapping.unit_multiplier != 1.0 %}
+        intValue = static_cast<int32_t>(intValue * {{ mapping.unit_multiplier }});
+        {% endif %}
+        {% if mapping.unit_offset != 0.0 %}
+        intValue += static_cast<int32_t>({{ mapping.unit_offset }});
+        {% endif %}
+        {% if mapping.min_value is not none %}
+        if (intValue < {{ mapping.min_value|int }}) {
+            LOG(WARNING) << "Value " << intValue << " below minimum {{ mapping.min_value|int }} for {{ mapping.vss_path }}";
+            intValue = {{ mapping.min_value|int }};
+        }
+        {% endif %}
+        {% if mapping.max_value is not none %}
+        if (intValue > {{ mapping.max_value|int }}) {
+            LOG(WARNING) << "Value " << intValue << " above maximum {{ mapping.max_value|int }} for {{ mapping.vss_path }}";
+            intValue = {{ mapping.max_value|int }};
+        }
+        {% endif %}
+        ConverterUtils::setInt32Value(propValue, intValue);
+        
+        {% elif mapping.vhal_type == 'BOOLEAN' %}
+        // Convert to boolean
+        bool boolValue = ConverterUtils::stringToBool(value);
+        ConverterUtils::setBoolValue(propValue, boolValue);
+        
+        {% elif mapping.vhal_type == 'STRING' %}
+        // Convert to string (direct assignment)
+        ConverterUtils::setStringValue(propValue, value);
+        
+        {% elif mapping.vhal_type == 'INT64' %}
+        // Convert to int64
+        int64_t longValue = ConverterUtils::stringToInt64(value);
+        {% if mapping.unit_multiplier != 1.0 %}
+        longValue = static_cast<int64_t>(longValue * {{ mapping.unit_multiplier }});
+        {% endif %}
+        {% if mapping.unit_offset != 0.0 %}
+        longValue += static_cast<int64_t>({{ mapping.unit_offset }});
+        {% endif %}
+        ConverterUtils::setInt64Value(propValue, longValue);
+        
+        {% elif mapping.vhal_type == 'BYTES' %}
+        // Convert to bytes (hex string to byte array)
+        std::vector<uint8_t> byteValue = ConverterUtils::hexStringToBytes(value);
+        ConverterUtils::setBytesValue(propValue, byteValue);
+        
+        {% else %}
+        // Mixed type - try to determine best conversion
+        if (ConverterUtils::isFloatString(value)) {
+            float floatValue = ConverterUtils::stringToFloat(value);
+            ConverterUtils::setFloatValue(propValue, floatValue);
+        } else if (ConverterUtils::isIntString(value)) {
+            int32_t intValue = ConverterUtils::stringToInt32(value);
+            ConverterUtils::setInt32Value(propValue, intValue);
+        } else if (ConverterUtils::isBoolString(value)) {
+            bool boolValue = ConverterUtils::stringToBool(value);
+            ConverterUtils::setBoolValue(propValue, boolValue);
+        } else {
+            // Default to string
+            ConverterUtils::setStringValue(propValue, value);
+        }
+        {% endif %}
+        
+        return true;
+        
+    } catch (const std::exception& e) {
+        LOG(ERROR) << "Exception converting {{ mapping.vss_path }} value '" << value << "': " << e.what();
+        return false;
+    }
+}
+
+{% endfor %}
+
+}  // namespace impl
+}  // namespace V2_0
+}  // namespace vehicle
+}  // namespace automotive
+}  // namespace hardware
+}  // namespace android

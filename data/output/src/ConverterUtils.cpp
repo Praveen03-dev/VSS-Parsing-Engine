@@ -1,0 +1,360 @@
+/*
+ * Copyright (C) 2024 The Android Open Source Project
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#define LOG_TAG "ConverterUtils"
+
+#include "ConverterUtils.h"
+
+#include <android-base/logging.h>
+#include <sstream>
+#include <algorithm>
+#include <regex>
+#include <stdexcept>
+#include <cmath>
+#include <climits>
+#include <chrono>
+
+namespace android {
+namespace hardware {
+namespace automotive {
+namespace vehicle {
+namespace V2_0 {
+namespace impl {
+
+void ConverterUtils::initializeProp(VehiclePropValue& propValue, int32_t propertyId, int32_t areaId) {
+    propValue.prop = propertyId;
+    propValue.areaId = areaId;
+    propValue.status = VehiclePropertyStatus::AVAILABLE;
+    propValue.timestamp = std::chrono::duration_cast<std::chrono::nanoseconds>(
+        std::chrono::system_clock::now().time_since_epoch()).count();
+    
+    // Clear all value fields
+    propValue.value.int32Values.clear();
+    propValue.value.int64Values.clear();
+    propValue.value.floatValues.clear();
+    propValue.value.stringValue.clear();
+    propValue.value.bytes.clear();
+}
+
+// String validation functions
+
+bool ConverterUtils::isFloatString(const std::string& str) {
+    if (str.empty()) return false;
+    
+    try {
+        std::string trimmed = trim(str);
+        if (trimmed.empty()) return false;
+        
+        // Use regex to validate float format
+        std::regex floatRegex(R"([+-]?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?)");
+        return std::regex_match(trimmed, floatRegex);
+    } catch (const std::exception&) {
+        return false;
+    }
+}
+
+bool ConverterUtils::isIntString(const std::string& str) {
+    if (str.empty()) return false;
+    
+    try {
+        std::string trimmed = trim(str);
+        if (trimmed.empty()) return false;
+        
+        // Use regex to validate integer format
+        std::regex intRegex(R"([+-]?\d+)");
+        return std::regex_match(trimmed, intRegex);
+    } catch (const std::exception&) {
+        return false;
+    }
+}
+
+bool ConverterUtils::isBoolString(const std::string& str) {
+    if (str.empty()) return false;
+    
+    std::string lower = toLower(trim(str));
+    return (lower == "true" || lower == "false" || 
+            lower == "1" || lower == "0" ||
+            lower == "yes" || lower == "no" ||
+            lower == "on" || lower == "off");
+}
+
+// String conversion functions
+
+float ConverterUtils::stringToFloat(const std::string& str) {
+    if (str.empty()) {
+        throw std::invalid_argument("Empty string cannot be converted to float");
+    }
+    
+    try {
+        std::string trimmed = trim(str);
+        size_t pos = 0;
+        float result = std::stof(trimmed, &pos);
+        
+        // Check if entire string was consumed
+        if (pos != trimmed.length()) {
+            throw std::invalid_argument("Invalid float format: " + str);
+        }
+        
+        // Check for special values
+        if (std::isnan(result)) {
+            throw std::invalid_argument("NaN is not a valid float value: " + str);
+        }
+        if (std::isinf(result)) {
+            throw std::invalid_argument("Infinity is not a valid float value: " + str);
+        }
+        
+        return result;
+    } catch (const std::invalid_argument&) {
+        throw;
+    } catch (const std::out_of_range&) {
+        throw std::invalid_argument("Float value out of range: " + str);
+    } catch (const std::exception& e) {
+        throw std::invalid_argument("Failed to convert string to float: " + str + " (" + e.what() + ")");
+    }
+}
+
+int32_t ConverterUtils::stringToInt32(const std::string& str) {
+    if (str.empty()) {
+        throw std::invalid_argument("Empty string cannot be converted to int32");
+    }
+    
+    try {
+        std::string trimmed = trim(str);
+        size_t pos = 0;
+        long long result = std::stoll(trimmed, &pos);
+        
+        // Check if entire string was consumed
+        if (pos != trimmed.length()) {
+            throw std::invalid_argument("Invalid int32 format: " + str);
+        }
+        
+        // Check range
+        if (result < INT32_MIN || result > INT32_MAX) {
+            throw std::invalid_argument("Value out of int32 range: " + str);
+        }
+        
+        return static_cast<int32_t>(result);
+    } catch (const std::invalid_argument&) {
+        throw;
+    } catch (const std::out_of_range&) {
+        throw std::invalid_argument("Int32 value out of range: " + str);
+    } catch (const std::exception& e) {
+        throw std::invalid_argument("Failed to convert string to int32: " + str + " (" + e.what() + ")");
+    }
+}
+
+int64_t ConverterUtils::stringToInt64(const std::string& str) {
+    if (str.empty()) {
+        throw std::invalid_argument("Empty string cannot be converted to int64");
+    }
+    
+    try {
+        std::string trimmed = trim(str);
+        size_t pos = 0;
+        long long result = std::stoll(trimmed, &pos);
+        
+        // Check if entire string was consumed
+        if (pos != trimmed.length()) {
+            throw std::invalid_argument("Invalid int64 format: " + str);
+        }
+        
+        return static_cast<int64_t>(result);
+    } catch (const std::invalid_argument&) {
+        throw;
+    } catch (const std::out_of_range&) {
+        throw std::invalid_argument("Int64 value out of range: " + str);
+    } catch (const std::exception& e) {
+        throw std::invalid_argument("Failed to convert string to int64: " + str + " (" + e.what() + ")");
+    }
+}
+
+bool ConverterUtils::stringToBool(const std::string& str) {
+    if (str.empty()) {
+        throw std::invalid_argument("Empty string cannot be converted to bool");
+    }
+    
+    std::string lower = toLower(trim(str));
+    
+    if (lower == "true" || lower == "1" || lower == "yes" || lower == "on") {
+        return true;
+    } else if (lower == "false" || lower == "0" || lower == "no" || lower == "off") {
+        return false;
+    } else {
+        throw std::invalid_argument("Invalid boolean format: " + str);
+    }
+}
+
+std::vector<uint8_t> ConverterUtils::hexStringToBytes(const std::string& hexStr) {
+    if (hexStr.empty()) {
+        return std::vector<uint8_t>();
+    }
+    
+    std::string trimmed = trim(hexStr);
+    
+    // Remove optional "0x" prefix
+    if (trimmed.length() >= 2 && trimmed.substr(0, 2) == "0x") {
+        trimmed = trimmed.substr(2);
+    }
+    
+    // Hex string must have even length
+    if (trimmed.length() % 2 != 0) {
+        throw std::invalid_argument("Hex string must have even length: " + hexStr);
+    }
+    
+    std::vector<uint8_t> bytes;
+    bytes.reserve(trimmed.length() / 2);
+    
+    for (size_t i = 0; i < trimmed.length(); i += 2) {
+        char high = trimmed[i];
+        char low = trimmed[i + 1];
+        
+        if (!isValidHexChar(high) || !isValidHexChar(low)) {
+            throw std::invalid_argument("Invalid hex character in string: " + hexStr);
+        }
+        
+        uint8_t byte = (hexCharToByte(high) << 4) | hexCharToByte(low);
+        bytes.push_back(byte);
+    }
+    
+    return bytes;
+}
+
+// VehiclePropValue manipulation functions
+
+void ConverterUtils::setFloatValue(VehiclePropValue& propValue, float value) {
+    propValue.value.floatValues.clear();
+    propValue.value.floatValues.push_back(value);
+    
+    // Clear other value types
+    propValue.value.int32Values.clear();
+    propValue.value.int64Values.clear();
+    propValue.value.stringValue.clear();
+    propValue.value.bytes.clear();
+}
+
+void ConverterUtils::setInt32Value(VehiclePropValue& propValue, int32_t value) {
+    propValue.value.int32Values.clear();
+    propValue.value.int32Values.push_back(value);
+    
+    // Clear other value types
+    propValue.value.int64Values.clear();
+    propValue.value.floatValues.clear();
+    propValue.value.stringValue.clear();
+    propValue.value.bytes.clear();
+}
+
+void ConverterUtils::setInt64Value(VehiclePropValue& propValue, int64_t value) {
+    propValue.value.int64Values.clear();
+    propValue.value.int64Values.push_back(value);
+    
+    // Clear other value types
+    propValue.value.int32Values.clear();
+    propValue.value.floatValues.clear();
+    propValue.value.stringValue.clear();
+    propValue.value.bytes.clear();
+}
+
+void ConverterUtils::setBoolValue(VehiclePropValue& propValue, bool value) {
+    // Boolean is stored as int32
+    propValue.value.int32Values.clear();
+    propValue.value.int32Values.push_back(value ? 1 : 0);
+    
+    // Clear other value types
+    propValue.value.int64Values.clear();
+    propValue.value.floatValues.clear();
+    propValue.value.stringValue.clear();
+    propValue.value.bytes.clear();
+}
+
+void ConverterUtils::setStringValue(VehiclePropValue& propValue, const std::string& value) {
+    propValue.value.stringValue = value;
+    
+    // Clear other value types
+    propValue.value.int32Values.clear();
+    propValue.value.int64Values.clear();
+    propValue.value.floatValues.clear();
+    propValue.value.bytes.clear();
+}
+
+void ConverterUtils::setBytesValue(VehiclePropValue& propValue, const std::vector<uint8_t>& value) {
+    propValue.value.bytes = value;
+    
+    // Clear other value types
+    propValue.value.int32Values.clear();
+    propValue.value.int64Values.clear();
+    propValue.value.floatValues.clear();
+    propValue.value.stringValue.clear();
+}
+
+// Utility functions for value processing
+
+float ConverterUtils::clampFloat(float value, float minVal, float maxVal) {
+    if (std::isnan(value)) {
+        LOG(WARNING) << "Clamping NaN float value to minimum: " << minVal;
+        return minVal;
+    }
+    return std::max(minVal, std::min(value, maxVal));
+}
+
+int32_t ConverterUtils::clampInt32(int32_t value, int32_t minVal, int32_t maxVal) {
+    return std::max(minVal, std::min(value, maxVal));
+}
+
+float ConverterUtils::applyLinearScaling(float value, float multiplier, float offset) {
+    return value * multiplier + offset;
+}
+
+// Helper functions
+
+std::string ConverterUtils::toLower(const std::string& str) {
+    std::string result = str;
+    std::transform(result.begin(), result.end(), result.begin(), ::tolower);
+    return result;
+}
+
+std::string ConverterUtils::trim(const std::string& str) {
+    size_t start = str.find_first_not_of(" \t\r\n");
+    if (start == std::string::npos) {
+        return "";
+    }
+    size_t end = str.find_last_not_of(" \t\r\n");
+    return str.substr(start, end - start + 1);
+}
+
+bool ConverterUtils::isValidHexChar(char c) {
+    return (c >= '0' && c <= '9') || 
+           (c >= 'A' && c <= 'F') || 
+           (c >= 'a' && c <= 'f');
+}
+
+uint8_t ConverterUtils::hexCharToByte(char c) {
+    if (c >= '0' && c <= '9') {
+        return static_cast<uint8_t>(c - '0');
+    } else if (c >= 'A' && c <= 'F') {
+        return static_cast<uint8_t>(c - 'A' + 10);
+    } else if (c >= 'a' && c <= 'f') {
+        return static_cast<uint8_t>(c - 'a' + 10);
+    } else {
+        throw std::invalid_argument("Invalid hex character: " + std::string(1, c));
+    }
+}
+
+}  // namespace impl
+}  // namespace V2_0
+}  // namespace vehicle
+}  // namespace automotive
+}  // namespace hardware
+}  // namespace android
