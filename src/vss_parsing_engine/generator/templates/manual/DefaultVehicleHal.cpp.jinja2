@@ -1,0 +1,585 @@
+// Copyright (C) 2016 The Android Open Source Project
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
+// Auto-generated enhanced VHAL implementation from VSS data
+// Generated from: {{ vss_file_path }}
+// Total properties: {{ properties|length }}
+
+#include "DefaultVehicleHal.h"
+#include "DefaultConfig.h"
+#include <utils/Log.h>
+#include <thread>
+#include <chrono>
+#include <random>
+#include <cmath>
+#include <algorithm>
+
+namespace android::hardware::automotive::vehicle::V2_0::impl {
+
+// ===== Mock Hardware Interface Base Classes =====
+
+class MockSensor {
+public:
+    virtual ~MockSensor() = default;
+    virtual float readValue() = 0;
+    virtual bool isAvailable() const { return true; }
+};
+
+class MockActuator {
+public:
+    virtual ~MockActuator() = default;
+    virtual bool writeValue(float value) = 0;
+    virtual bool isAvailable() const { return true; }
+    virtual float getCurrentValue() const { return 0.0f; }
+};
+
+// ===== Specific Sensor/Actuator Implementations =====
+
+class SpeedSensor : public MockSensor {
+private:
+    mutable std::mt19937 rng_{std::random_device{}()};
+    mutable std::normal_distribution<float> dist_{50.0f, 10.0f}; // Mean 50 km/h, stddev 10
+    mutable float currentSpeed_ = 0.0f;
+    mutable std::chrono::steady_clock::time_point lastUpdate_;
+    
+public:
+    SpeedSensor() : lastUpdate_(std::chrono::steady_clock::now()) {}
+    
+    float readValue() override {
+        auto now = std::chrono::steady_clock::now();
+        auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - lastUpdate_);
+        
+        if (elapsed.count() > 100) { // Update every 100ms
+            float targetSpeed = std::max(0.0f, dist_(rng_));
+            float speedDiff = targetSpeed - currentSpeed_;
+            currentSpeed_ += speedDiff * 0.1f; // Smooth transition
+            lastUpdate_ = now;
+        }
+        
+        return currentSpeed_;
+    }
+};
+
+class TemperatureSensor : public MockSensor {
+private:
+    mutable std::mt19937 rng_{std::random_device{}()};
+    mutable std::normal_distribution<float> dist_{22.0f, 5.0f}; // Mean 22°C, stddev 5
+    mutable float currentTemp_ = 22.0f;
+    mutable std::chrono::steady_clock::time_point lastUpdate_;
+    
+public:
+    TemperatureSensor() : lastUpdate_(std::chrono::steady_clock::now()) {}
+    
+    float readValue() override {
+        auto now = std::chrono::steady_clock::now();
+        auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - lastUpdate_);
+        
+        if (elapsed.count() > 1000) { // Update every 1000ms for temperature
+            float targetTemp = dist_(rng_);
+            float tempDiff = targetTemp - currentTemp_;
+            currentTemp_ += tempDiff * 0.05f; // Very slow temperature changes
+            lastUpdate_ = now;
+        }
+        
+        return currentTemp_;
+    }
+};
+
+class GenericActuator : public MockActuator {
+private:
+    float currentValue_ = 0.0f;
+    std::string name_;
+    
+public:
+    GenericActuator(const std::string& name) : name_(name) {}
+    
+    bool writeValue(float value) override {
+        currentValue_ = value;
+        ALOGD("GenericActuator '%s': Set to %f", name_.c_str(), value);
+        return true;
+    }
+    
+    float getCurrentValue() const override {
+        return currentValue_;
+    }
+};
+
+// ===== Subscription Manager =====
+
+class SubscriptionManager {
+private:
+    struct SubscriptionInfo {
+        int32_t property;
+        float sampleRate;
+        std::thread workerThread;
+        std::atomic<bool> isActive{false};
+    };
+    
+    std::map<int32_t, std::unique_ptr<SubscriptionInfo>> subscriptions_;
+    std::mutex subscriptionsMutex_;
+    DefaultVehicleHal* hal_;
+    
+public:
+    SubscriptionManager(DefaultVehicleHal* hal) : hal_(hal) {}
+    
+    ~SubscriptionManager() {
+        stopAllSubscriptions();
+    }
+    
+    bool startSubscription(int32_t property, float sampleRate) {
+        std::lock_guard<std::mutex> lock(subscriptionsMutex_);
+        
+        if (subscriptions_.find(property) != subscriptions_.end()) {
+            ALOGD("Property 0x%x already subscribed", property);
+            return true;
+        }
+        
+        auto info = std::make_unique<SubscriptionInfo>();
+        info->property = property;
+        info->sampleRate = sampleRate;
+        info->isActive = true;
+        
+        // Start worker thread for continuous updates
+        info->workerThread = std::thread([this, property, sampleRate]() {
+            auto& subscription = subscriptions_[property];
+            auto interval = std::chrono::milliseconds(
+                static_cast<int>(1000.0f / std::max(sampleRate, 0.1f))
+            );
+            
+            ALOGD("Starting subscription worker for property 0x%x at %f Hz", property, sampleRate);
+            
+            while (subscription && subscription->isActive) {
+                hal_->generateAndNotifyPropertyUpdate(property);
+                std::this_thread::sleep_for(interval);
+            }
+            
+            ALOGD("Subscription worker stopped for property 0x%x", property);
+        });
+        
+        subscriptions_[property] = std::move(info);
+        ALOGD("Started subscription for property 0x%x", property);
+        return true;
+    }
+    
+    bool stopSubscription(int32_t property) {
+        std::lock_guard<std::mutex> lock(subscriptionsMutex_);
+        
+        auto it = subscriptions_.find(property);
+        if (it == subscriptions_.end()) {
+            return false;
+        }
+        
+        ALOGD("Stopping subscription for property 0x%x", property);
+        it->second->isActive = false;
+        if (it->second->workerThread.joinable()) {
+            it->second->workerThread.join();
+        }
+        
+        subscriptions_.erase(it);
+        return true;
+    }
+    
+    void stopAllSubscriptions() {
+        std::lock_guard<std::mutex> lock(subscriptionsMutex_);
+        
+        ALOGD("Stopping all subscriptions");
+        for (auto& [property, info] : subscriptions_) {
+            info->isActive = false;
+            if (info->workerThread.joinable()) {
+                info->workerThread.join();
+            }
+        }
+        
+        subscriptions_.clear();
+    }
+};
+
+// ===== DefaultVehicleHal Implementation =====
+
+DefaultVehicleHal::DefaultVehicleHal(VehiclePropertyStore* propStore)
+    : mPropStore(propStore), mRandomGenerator(std::random_device{}()) {
+    
+    ALOGD("Initializing DefaultVehicleHal with {{ properties|length }} properties");
+    
+    // Register properties from the generated config file.
+    for (const auto& config : kVehicleProperties) {
+        mPropStore->registerProperty(config.config);
+        ALOGV("Registered property 0x%x", config.config.prop);
+    }
+    
+    // Initialize mock hardware interfaces
+    initializeMockHardware();
+    
+    // Initialize subscription manager
+    mSubscriptionManager = std::make_unique<SubscriptionManager>(this);
+    
+    ALOGD("DefaultVehicleHal initialization complete");
+}
+
+DefaultVehicleHal::~DefaultVehicleHal() {
+    ALOGD("Destroying DefaultVehicleHal");
+    // Clean up resources
+    mSubscriptionManager.reset();
+    mSensors.clear();
+    mActuators.clear();
+}
+
+void DefaultVehicleHal::initializeMockHardware() {
+    ALOGD("Initializing mock hardware interfaces");
+    
+    // Initialize sensors and actuators based on property types
+{% for p in properties %}
+    {% if 'speed' in p.name.lower() or 'velocity' in p.name.lower() %}
+    // Speed/Velocity sensor for {{ p.name }}
+    mSensors[toInt(VehicleProperty::{{ p.vhal_id }})] = std::make_unique<SpeedSensor>();
+    {% elif 'temp' in p.name.lower() or 'temperature' in p.name.lower() %}
+    // Temperature sensor for {{ p.name }}
+    mSensors[toInt(VehicleProperty::{{ p.vhal_id }})] = std::make_unique<TemperatureSensor>();
+    {% elif p.vhal_access|upper in ['READ', 'READ_WRITE'] and p.vhal_change_mode|upper == 'CONTINUOUS' %}
+    // Generic sensor for {{ p.name }}
+    mSensors[toInt(VehicleProperty::{{ p.vhal_id }})] = std::make_unique<SpeedSensor>(); // Default to speed-like
+    {% endif %}
+    
+    {% if p.vhal_access|upper in ['WRITE', 'READ_WRITE'] %}
+    // Actuator for {{ p.name }}
+    mActuators[toInt(VehicleProperty::{{ p.vhal_id }})] = std::make_unique<GenericActuator>("{{ p.name }}");
+    {% endif %}
+{% endfor %}
+    
+    ALOGD("Mock hardware initialization complete: %zu sensors, %zu actuators", 
+          mSensors.size(), mActuators.size());
+}
+
+std::vector<VehiclePropConfig> DefaultVehicleHal::listProperties() {
+    return mPropStore->getAllConfigs();
+}
+
+VehicleHal::VehiclePropValuePtr DefaultVehicleHal::get(
+    const VehiclePropValue& requestedPropValue,
+    StatusCode* outStatus) {
+    
+    int32_t property = requestedPropValue.prop;
+    ALOGV("Getting property: 0x%x", property);
+    
+    // Custom property handling with hardware simulation
+    switch (property) {
+{% for p in properties %}
+    {% if p.vhal_access|upper in ['READ', 'READ_WRITE'] %}
+        case toInt(VehicleProperty::{{ p.vhal_id }}): {
+            StatusCode status = read{{ p.name|replace('.', '')|replace('_', '')|replace('-', '') }}(requestedPropValue);
+            if (status == StatusCode::OK) {
+                auto value = mPropStore->readValueOrNull(requestedPropValue);
+                *outStatus = value ? StatusCode::OK : StatusCode::NOT_AVAILABLE;
+                return value;
+            }
+            *outStatus = status;
+            return nullptr;
+        }
+    {% endif %}
+{% endfor %}
+        
+        default:
+            // Fall back to reading from property store for unknown properties
+            break;
+    }
+    
+    // Default behavior: read from property store
+    auto value = mPropStore->readValueOrNull(requestedPropValue);
+    
+    if (value) {
+        *outStatus = StatusCode::OK;
+        return value;
+    } else {
+        *outStatus = StatusCode::NOT_AVAILABLE;
+        return nullptr;
+    }
+}
+
+StatusCode DefaultVehicleHal::set(const VehiclePropValue& propValue) {
+    int32_t property = propValue.prop;
+    ALOGV("Setting property: 0x%x", property);
+    
+    // Custom property handling with hardware simulation
+    switch (property) {
+{% for p in properties %}
+    {% if p.vhal_access|upper in ['WRITE', 'READ_WRITE'] %}
+        case toInt(VehicleProperty::{{ p.vhal_id }}): {
+            return write{{ p.name|replace('.', '')|replace('_', '')|replace('-', '') }}(propValue);
+        }
+    {% endif %}
+{% endfor %}
+        
+        default:
+            // Fall back to writing to property store for unknown properties
+            break;
+    }
+    
+    // Default behavior: write to property store
+    if (mPropStore->writeValue(propValue, false)) {
+        return StatusCode::OK;
+    } else {
+        return StatusCode::INTERNAL_ERROR;
+    }
+}
+
+StatusCode DefaultVehicleHal::subscribe(int32_t property, float sampleRate) {
+    ALOGD("Subscribing to property: 0x%x with rate: %f Hz", property, sampleRate);
+    
+    // Check if this is a subscribable property
+    auto config = mPropStore->getConfig(property);
+    if (!config) {
+        ALOGE("Property 0x%x not found", property);
+        return StatusCode::INVALID_ARG;
+    }
+    
+    if (config->changeMode == VehiclePropertyChangeMode::STATIC) {
+        ALOGE("Cannot subscribe to STATIC property: 0x%x", property);
+        return StatusCode::INVALID_ARG;
+    }
+    
+    // Start subscription with our subscription manager
+    if (mSubscriptionManager->startSubscription(property, sampleRate)) {
+        return StatusCode::OK;
+    } else {
+        return StatusCode::INTERNAL_ERROR;
+    }
+}
+
+StatusCode DefaultVehicleHal::unsubscribe(int32_t property) {
+    ALOGD("Unsubscribing from property: 0x%x", property);
+    
+    if (mSubscriptionManager->stopSubscription(property)) {
+        return StatusCode::OK;
+    } else {
+        return StatusCode::NOT_AVAILABLE;
+    }
+}
+
+void DefaultVehicleHal::generateAndNotifyPropertyUpdate(int32_t property) {
+    // This method is called by the subscription manager to generate updates
+    VehiclePropValue requestedPropValue;
+    requestedPropValue.prop = property;
+    requestedPropValue.areaId = 0; // Global area for simplicity
+    
+    StatusCode status;
+    auto value = get(requestedPropValue, &status);
+    
+    if (status == StatusCode::OK && value) {
+        ALOGV("Property update generated for 0x%x: timestamp=%ld", 
+              property, value->timestamp);
+        
+        // The VehicleHalManager will handle the actual callback notification
+        // We just need to ensure the property store is updated, which we do in get()
+    }
+}
+
+// Helper method to get current timestamp
+int64_t DefaultVehicleHal::elapsedRealtimeNano() {
+    auto now = std::chrono::steady_clock::now();
+    return std::chrono::duration_cast<std::chrono::nanoseconds>(
+        now.time_since_epoch()).count();
+}
+
+// ===== Property-specific read methods =====
+{% for p in properties %}
+{% if p.vhal_access|upper in ['READ', 'READ_WRITE'] %}
+
+StatusCode DefaultVehicleHal::read{{ p.name|replace('.', '')|replace('_', '')|replace('-', '') }}(VehiclePropValue& value) {
+    int32_t property = toInt(VehicleProperty::{{ p.vhal_id }});
+    
+    // Check if we have a specific sensor for this property
+    auto sensorIt = mSensors.find(property);
+    if (sensorIt != mSensors.end() && sensorIt->second->isAvailable()) {
+        float sensorValue = sensorIt->second->readValue();
+        
+        // Create updated property value
+        VehiclePropValue updatedValue;
+        updatedValue.prop = property;
+        updatedValue.areaId = value.areaId;
+        updatedValue.timestamp = elapsedRealtimeNano();
+        
+        // Set value based on property type
+        {% if p.vhal_type|upper == 'FLOAT' %}
+        updatedValue.value.floatValues.push_back(sensorValue);
+        {% elif p.vhal_type|upper == 'INT32' %}
+        updatedValue.value.int32Values.push_back(static_cast<int32_t>(sensorValue));
+        {% elif p.vhal_type|upper == 'INT64' %}
+        updatedValue.value.int64Values.push_back(static_cast<int64_t>(sensorValue));
+        {% elif p.vhal_type|upper == 'BOOLEAN' %}
+        updatedValue.value.int32Values.push_back(sensorValue > 0.5f ? 1 : 0);
+        {% elif p.vhal_type|upper == 'STRING' %}
+        updatedValue.value.stringValue = std::to_string(sensorValue);
+        {% else %}
+        // Default to float for unknown types
+        updatedValue.value.floatValues.push_back(sensorValue);
+        {% endif %}
+        
+        // Update the property store
+        if (mPropStore->writeValue(updatedValue, false)) {
+            ALOGV("Updated {{ p.name }} with sensor value: %f", sensorValue);
+            return StatusCode::OK;
+        }
+    }
+    
+    // Fallback to property store if no sensor available
+    ALOGV("No sensor available for {{ p.name }}, using stored value");
+    return StatusCode::OK;
+}
+{% endif %}
+{% endfor %}
+
+// ===== Property-specific write methods =====
+{% for p in properties %}
+{% if p.vhal_access|upper in ['WRITE', 'READ_WRITE'] %}
+
+StatusCode DefaultVehicleHal::write{{ p.name|replace('.', '')|replace('_', '')|replace('-', '') }}(const VehiclePropValue& value) {
+    int32_t property = toInt(VehicleProperty::{{ p.vhal_id }});
+    
+    // Extract value based on property type
+    float actuatorValue = 0.0f;
+    {% if p.vhal_type|upper == 'FLOAT' %}
+    if (!value.value.floatValues.empty()) {
+        actuatorValue = value.value.floatValues[0];
+    }
+    {% elif p.vhal_type|upper == 'INT32' %}
+    if (!value.value.int32Values.empty()) {
+        actuatorValue = static_cast<float>(value.value.int32Values[0]);
+    }
+    {% elif p.vhal_type|upper == 'INT64' %}
+    if (!value.value.int64Values.empty()) {
+        actuatorValue = static_cast<float>(value.value.int64Values[0]);
+    }
+    {% elif p.vhal_type|upper == 'BOOLEAN' %}
+    if (!value.value.int32Values.empty()) {
+        actuatorValue = value.value.int32Values[0] ? 1.0f : 0.0f;
+    }
+    {% elif p.vhal_type|upper == 'STRING' %}
+    if (!value.value.stringValue.empty()) {
+        try {
+            actuatorValue = std::stof(value.value.stringValue);
+        } catch (const std::exception& e) {
+            ALOGE("Failed to parse string value for {{ p.name }}: %s", e.what());
+            return StatusCode::INVALID_ARG;
+        }
+    }
+    {% else %}
+    // Default handling for unknown types
+    if (!value.value.floatValues.empty()) {
+        actuatorValue = value.value.floatValues[0];
+    } else if (!value.value.int32Values.empty()) {
+        actuatorValue = static_cast<float>(value.value.int32Values[0]);
+    }
+    {% endif %}
+    
+    // Check if we have a specific actuator for this property
+    auto actuatorIt = mActuators.find(property);
+    if (actuatorIt != mActuators.end() && actuatorIt->second->isAvailable()) {
+        if (actuatorIt->second->writeValue(actuatorValue)) {
+            // Update the property store with the new value
+            if (mPropStore->writeValue(value, false)) {
+                ALOGD("Successfully wrote {{ p.name }} with value: %f", actuatorValue);
+                return StatusCode::OK;
+            } else {
+                ALOGE("Failed to update property store for {{ p.name }}");
+                return StatusCode::INTERNAL_ERROR;
+            }
+        } else {
+            ALOGE("Actuator failed to write value for {{ p.name }}");
+            return StatusCode::INTERNAL_ERROR;
+        }
+    }
+    
+    // Fallback to property store if no actuator available
+    if (mPropStore->writeValue(value, false)) {
+        ALOGV("Updated {{ p.name }} in property store (no actuator)");
+        return StatusCode::OK;
+    } else {
+        ALOGE("Failed to write {{ p.name }} to property store");
+        return StatusCode::INTERNAL_ERROR;
+    }
+}
+{% endif %}
+{% endfor %}
+
+// ===== Property-specific simulation methods =====
+{% for p in properties %}
+{% if p.vhal_change_mode|upper == 'CONTINUOUS' %}
+
+void DefaultVehicleHal::simulate{{ p.name|replace('.', '')|replace('_', '')|replace('-', '') }}(VehiclePropValue& value) {
+    // Simulation logic for {{ p.name }}
+    // This method generates realistic data for continuous properties
+    
+    std::lock_guard<std::mutex> lock(mCacheMutex);
+    auto now = std::chrono::steady_clock::now();
+    int32_t property = toInt(VehicleProperty::{{ p.vhal_id }});
+    
+    auto lastUpdateIt = mLastUpdates.find(property);
+    bool shouldUpdate = lastUpdateIt == mLastUpdates.end() ||
+                       std::chrono::duration_cast<std::chrono::milliseconds>(
+                           now - lastUpdateIt->second).count() > 100;
+    
+    if (shouldUpdate) {
+        float simulatedValue;
+        
+        {% if 'speed' in p.name.lower() or 'velocity' in p.name.lower() %}
+        // Speed simulation: varies between 0-120 km/h
+        std::uniform_real_distribution<float> speedDist(0.0f, 120.0f);
+        simulatedValue = speedDist(mRandomGenerator);
+        {% elif 'temp' in p.name.lower() or 'temperature' in p.name.lower() %}
+        // Temperature simulation: varies between -20 to 50°C
+        std::normal_distribution<float> tempDist(20.0f, 10.0f);
+        simulatedValue = std::clamp(tempDist(mRandomGenerator), -20.0f, 50.0f);
+        {% elif 'pressure' in p.name.lower() %}
+        // Pressure simulation: varies around standard atmospheric
+        std::normal_distribution<float> pressureDist(101325.0f, 5000.0f);
+        simulatedValue = std::max(80000.0f, pressureDist(mRandomGenerator));
+        {% elif 'rpm' in p.name.lower() %}
+        // RPM simulation: varies between idle and redline
+        std::uniform_real_distribution<float> rpmDist(800.0f, 6000.0f);
+        simulatedValue = rpmDist(mRandomGenerator);
+        {% else %}
+        // Generic continuous value simulation
+        std::normal_distribution<float> genericDist(50.0f, 20.0f);
+        simulatedValue = std::max(0.0f, genericDist(mRandomGenerator));
+        {% endif %}
+        
+        // Cache the new value
+        mPropertyValues[property] = simulatedValue;
+        mLastUpdates[property] = now;
+        
+        // Update the value object
+        {% if p.vhal_type|upper == 'FLOAT' %}
+        value.value.floatValues.clear();
+        value.value.floatValues.push_back(simulatedValue);
+        {% elif p.vhal_type|upper == 'INT32' %}
+        value.value.int32Values.clear();
+        value.value.int32Values.push_back(static_cast<int32_t>(simulatedValue));
+        {% elif p.vhal_type|upper == 'INT64' %}
+        value.value.int64Values.clear();
+        value.value.int64Values.push_back(static_cast<int64_t>(simulatedValue));
+        {% else %}
+        // Default to float
+        value.value.floatValues.clear();
+        value.value.floatValues.push_back(simulatedValue);
+        {% endif %}
+        
+        value.timestamp = elapsedRealtimeNano();
+        
+        ALOGV("Simulated {{ p.name }}: %f", simulatedValue);
+    }
+}
+{% endif %}
+{% endfor %}
+
+}  // namespace android::hardware::automotive::vehicle::V2_0::impl

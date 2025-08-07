@@ -1,0 +1,50 @@
+/*
+ * Copyright (C) 2016 The Android Open Source Project
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package android.hardware.automotive.vehicle@2.0;
+
+/**
+ * Callback interface that Vehicle HAL implementation uses to notify clients
+ * about property changes and errors.
+ */
+interface IVehicleCallback {
+    /**
+     * Event callback happens whenever a variable that the API user has
+     * subscribed to needs to be reported.
+     *
+     * @param propValues List of property values that have been updated.
+     */
+    oneway onPropertyEvent(vec<VehiclePropValue> propValues);
+
+    /**
+     * This method gets called if the client was subscribed to a property using
+     * SubscribeFlags::EVENTS_FROM_ANDROID flag and IVehicle#set(...) method was called.
+     *
+     * @param propValue Value that was set by a client.
+     */
+    oneway onPropertySet(VehiclePropValue propValue);
+
+    /**
+     * Set property value is usually asynchronous operation. If a rare event
+     * occurs where setting a property fails after the initial `set()` call
+     * returns success, this method must be called.
+     *
+     * @param errorCode Error code returned from the set operation.
+     * @param propId Property ID that could not be set.
+     * @param areaId Area ID that could not be set (must be 0 for global properties).
+     */
+    oneway onPropertySetError(StatusCode errorCode, int32_t propId, int32_t areaId);
+};

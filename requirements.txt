@@ -2,3 +2,4 @@ pyyaml
 anytree
 vspec-tools
 fuzzywuzzy
+jinja2

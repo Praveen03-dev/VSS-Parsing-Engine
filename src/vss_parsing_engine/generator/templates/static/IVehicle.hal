@@ -1,0 +1,92 @@
+/*
+ * Copyright (C) 2016 The Android Open Source Project
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package android.hardware.automotive.vehicle@2.0;
+
+/**
+ * Represents all the vehicles' properties' configurations.
+ */
+interface IVehicle {
+    /**
+     * Returns a list of all property configurations supported by this vehicle.
+     *
+     * @return configs List of vehicle property configurations.
+     */
+    getAllPropConfigs() generates (vec<VehiclePropConfig> configs);
+
+    /**
+     * Returns a list of property configurations for given properties.
+     *
+     * @param props List of property IDs to get configurations for.
+     * @return propConfigs List of vehicle property configurations.
+     * @return status Status of the call.
+     */
+    getPropConfigs(vec<int32_t> props)
+        generates (StatusCode status, vec<VehiclePropConfig> propConfigs);
+
+    /**
+     * Get a vehicle property value.
+     *
+     * @param requestedPropValue Vehicle property to get.
+     * @return status Status of the call.
+     * @return propValue Current property value or null if property is not
+     *                   available.
+     */
+    get(VehiclePropValue requestedPropValue)
+        generates (StatusCode status, VehiclePropValue propValue);
+
+    /**
+     * Set a vehicle property value.
+     *
+     * @param propValue Vehicle property to set.
+     * @return status Status of the call.
+     */
+    set(VehiclePropValue propValue) generates (StatusCode status);
+
+    /**
+     * Subscribes to property events.
+     *
+     * @param listener This client's IVehicleCallback interface that will be
+     *                 called.
+     * @param options List of properties to subscribe with sample rates.
+     * @return status Status of subscription.
+     */
+    subscribe(IVehicleCallback listener, vec<SubscribeOptions> options)
+        generates (StatusCode status);
+
+    /**
+     * Unsubscribes from property events.
+     *
+     * @param listener Previously registered IVehicleCallback interface.
+     * @param propId Property to unsubscribe from.
+     * @return status Status of the call.
+     */
+    unsubscribe(IVehicleCallback listener, int32_t propId)
+        generates (StatusCode status);
+
+    /**
+     * Print out debugging state for the vehicle.
+     * The text must be in ASCII encoding only.
+     *
+     * Performance requirements:
+     *
+     * The HAL must return from this call in less than 10ms. This call must
+     * avoid deadlocks, as it may be called at any point of operation.
+     *
+     * @return debug Debug information for the vehicle.
+     */
+    debugDump() generates (string debug);
+};

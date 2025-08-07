@@ -1,0 +1,158 @@
+/*
+ * Copyright (C) 2016 The Android Open Source Project
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef VEHICLE_HAL_DEFAULT_VEHICLE_HAL_H_
+#define VEHICLE_HAL_DEFAULT_VEHICLE_HAL_H_
+
+#include <vhal_v2_0/VehicleHal.h>
+#include <vhal_v2_0/VehiclePropertyStore.h>
+#include "DefaultConfig.h"
+#include "MockSensor.h"
+#include "MockActuator.h"
+#include "SubscriptionManager.h"
+#include <memory>
+#include <map>
+#include <thread>
+#include <atomic>
+#include <mutex>
+#include <chrono>
+#include <random>
+
+namespace android::hardware::automotive::vehicle::V2_0::impl {
+
+// Forward declarations for mock hardware interfaces
+class MockSensor;
+class MockActuator;
+class SubscriptionManager;
+
+/**
+ * Enhanced Vehicle HAL implementation with simulation capabilities.
+ * Auto-generated from VSS data with property-specific logic.
+ * Generated from: {{ vss_file_path }}
+ * 
+ * This class contains custom logic for handling {{ properties|length }} VSS-generated properties
+ * with mock hardware interfaces and realistic data simulation.
+ */
+class DefaultVehicleHal : public VehicleHal {
+public:
+    /**
+     * Constructor.
+     * @param propStore A pointer to the shared VehiclePropertyStore.
+     */
+    DefaultVehicleHal(VehiclePropertyStore* propStore);
+    virtual ~DefaultVehicleHal();
+
+    // Implement VehicleHal interface
+    std::vector<VehiclePropConfig> listProperties() override;
+    VehiclePropValuePtr get(const VehiclePropValue& requestedPropValue,
+                            StatusCode* outStatus) override;
+    StatusCode set(const VehiclePropValue& propValue) override;
+    StatusCode subscribe(int32_t property, float sampleRate) override;
+    StatusCode unsubscribe(int32_t property) override;
+
+    // Public method for subscription manager to generate updates
+    void generateAndNotifyPropertyUpdate(int32_t property);
+
+private:
+    // Initialize mock hardware interfaces
+    void initializeMockHardware();
+    
+    // Helper methods
+    int64_t elapsedRealtimeNano();
+    
+    // Property-specific simulation methods
+{% for p in properties %}
+    {% if p.vhal_change_mode|upper == 'CONTINUOUS' %}
+    void simulate{{ p.name|replace('.', '')|replace('_', '')|replace('-', '') }}(VehiclePropValue& value);
+    {% endif %}
+{% endfor %}
+
+    // Property-specific hardware read methods
+{% for p in properties %}
+    {% if p.vhal_access|upper in ['READ', 'READ_WRITE'] %}
+    StatusCode read{{ p.name|replace('.', '')|replace('_', '')|replace('-', '') }}(VehiclePropValue& value);
+    {% endif %}
+{% endfor %}
+
+    // Property-specific hardware write methods  
+{% for p in properties %}
+    {% if p.vhal_access|upper in ['WRITE', 'READ_WRITE'] %}
+    StatusCode write{{ p.name|replace('.', '')|replace('_', '')|replace('-', '') }}(const VehiclePropValue& value);
+    {% endif %}
+{% endfor %}
+
+    // A raw pointer to the shared property store, managed by the service.
+    VehiclePropertyStore* mPropStore;
+    
+    // Mock hardware interfaces organized by property type
+    std::map<int32_t, std::unique_ptr<MockSensor>> mSensors;
+    std::map<int32_t, std::unique_ptr<MockActuator>> mActuators;
+    
+    // Subscription management
+    std::unique_ptr<SubscriptionManager> mSubscriptionManager;
+    
+    // Random number generation for simulation
+    mutable std::mt19937 mRandomGenerator;
+    
+    // Property value caches for smooth simulation
+    std::map<int32_t, float> mPropertyValues;
+    std::map<int32_t, std::chrono::steady_clock::time_point> mLastUpdates;
+    std::mutex mCacheMutex;
+    
+    // Constants for different property categories
+{% set speed_properties = [] %}
+{% set temp_properties = [] %}
+{% set pressure_properties = [] %}
+{% set door_properties = [] %}
+{% set continuous_properties = [] %}
+{% for p in properties %}
+    {% if 'speed' in p.name.lower() or 'velocity' in p.name.lower() %}
+        {% set _ = speed_properties.append(p) %}
+    {% elif 'temp' in p.name.lower() or 'temperature' in p.name.lower() %}
+        {% set _ = temp_properties.append(p) %}
+    {% elif 'pressure' in p.name.lower() %}
+        {% set _ = pressure_properties.append(p) %}
+    {% elif 'door' in p.name.lower() or 'lock' in p.name.lower() %}
+        {% set _ = door_properties.append(p) %}
+    {% endif %}
+    {% if p.vhal_change_mode|upper == 'CONTINUOUS' %}
+        {% set _ = continuous_properties.append(p) %}
+    {% endif %}
+{% endfor %}
+    
+    // Property categories for organized simulation
+    static constexpr int32_t SPEED_PROPERTIES[] = {
+{% for p in speed_properties %}
+        toInt(VehicleProperty::{{ p.vhal_id }}),
+{% endfor %}
+    };
+    
+    static constexpr int32_t TEMPERATURE_PROPERTIES[] = {
+{% for p in temp_properties %}
+        toInt(VehicleProperty::{{ p.vhal_id }}),
+{% endfor %}
+    };
+    
+    static constexpr int32_t DOOR_PROPERTIES[] = {
+{% for p in door_properties %}
+        toInt(VehicleProperty::{{ p.vhal_id }}),
+{% endfor %}
+    };
+};
+
+}  // namespace android::hardware::automotive::vehicle::V2_0::impl
+
+#endif  // VEHICLE_HAL_DEFAULT_VEHICLE_HAL_H_

@@ -1,0 +1,197 @@
+boolean:
+  cpp: int32_t
+  vhal: BOOLEAN
+  default_value: false
+  from:
+    string: (int32_t)((_val_) == "true")
+  to:
+    BOOLEAN: (int32_t)(bool(_val_))
+    INT32: (int32_t)(_val_)
+    UINT32: (uint32_t)(_val_)
+    INT16: (int16_t)(_val_)
+    UINT16: (uint16_t)(_val_)
+    INT8: (int8_t)(_val_)
+    UINT8: (uint8_t)(_val_)
+    FLOAT: float(_val_)
+
+int32:
+  cpp: int32_t
+  vhal: INT32
+  default_value: 0
+  from:
+    string: std::stoi(_val_)
+  to:
+    BOOLEAN: bool(_val_)
+    INT32: (_val_)
+    UINT32: (uint32_t)(_val_)
+    INT16: (int16_t)(_val_)
+    UINT16: (uint16_t)(_val_)
+    UINT8: (uint8_t)(_val_)
+    FLOAT: float(_val_)
+
+uint32:
+  cpp: uint32_t
+  vhal: INT32
+  default_value: 0
+  from:
+    string: (uint32_t)std::stoi(_val_)
+  to:
+    BOOLEAN: bool(_val_)
+    INT32: (int32_t)(_val_)
+    UINT32: (_val_)
+    INT16: (int16_t)(_val_)
+    UINT16: (uint16_t)(_val_)
+    UINT8: (uint8_t)(_val_)
+    FLOAT: float(_val_)
+
+int16:
+  cpp: int16_t
+  vhal: INT32
+  default_value: 0
+  from:
+    string: (int16_t)std::stoi(_val_)
+  to:
+    BOOLEAN: bool(_val_)
+    INT32: (int32_t)(_val_)
+    UINT32: (uint32_t)(_val_)
+    INT16: (_val_)
+    UINT16: (uint16_t)(_val_)
+    UINT8: (uint8_t)(_val_)
+    FLOAT: float(_val_)
+
+uint16:
+  cpp: uint16_t
+  vhal: INT32
+  default_value: 0
+  from:
+    string: (uint16_t)std::stoi(_val_)
+  to:
+    BOOLEAN: bool(_val_)
+    INT32: (int32_t)(_val_)
+    UINT32: (uint32_t)(_val_)
+    INT16: (int16_t)(_val_)
+    UINT16: (_val_)
+    UINT8: (uint8_t)(_val_)
+    FLOAT: float(_val_)
+
+int8:
+  cpp: int8_t
+  vhal: INT32
+  default_value: 0
+  from:
+    string: (int8_t)std::stoi(_val_)
+  to:
+    BOOLEAN: bool(_val_)
+    INT32: (int32_t)(_val_)
+    UINT32: (uint32_t)(_val_)
+    INT16: (int16_t)(_val_)
+    UINT16: (uint16_t)(_val_)
+    INT8: (_val_)
+    UINT8: (uint8_t)(_val_)
+    FLOAT: float(_val_)
+
+uint8:
+  cpp: uint8_t
+  vhal: INT32
+  default_value: 0
+  from:
+    string: (uint8_t)std::stoi(_val_)
+  to:
+    BOOLEAN: bool(_val_)
+    INT32: (int32_t)(_val_)
+    UINT32: (uint32_t)(_val_)
+    INT16: (int16_t)(_val_)
+    UINT16: (uint16_t)(_val_)
+    INT8: (int8_t)(_val_)
+    UINT8: (_val_)
+    FLOAT: float(_val_)
+
+float:
+  cpp: float
+  vhal: FLOAT
+  default_value: 0.0
+  from:
+    string: std::stof(_val_)
+  to:
+    BOOLEAN: (int32_t)int(_val_)
+    INT32: (int32_t)int(_val_)
+    UINT32: (uint32_t)int(_val_)
+    INT16: (int16_t)int(_val_)
+    UINT16: (uint16_t)int(_val_)
+    INT8: (int8_t)int(_val_)
+    UINT8: (uint8_t)int(_val_)
+    FLOAT: (_val_)
+
+string:
+  cpp: std::string
+  vhal: STRING
+  default_value: ""
+  from:
+    string: (_val_)
+  to:
+    STRING: (_val_)
+
+double:
+  cpp: double
+  vhal: FLOAT
+  default_value: 0.0
+  from:
+    string: std::stod(_val_)
+  to:
+    FLOAT: float(_val_)
+    DOUBLE: (_val_)
+
+uint64:
+  cpp: uint64_t
+  vhal: INT64
+  default_value: 0
+  from:
+    string: (uint64_t)std::stoull(_val_)
+  to:
+    BOOLEAN: bool(_val_)
+    INT32: (int32_t)(_val_)
+    UINT32: (uint32_t)(_val_)
+    INT64: (int64_t)(_val_)
+    UINT64: (_val_)
+    FLOAT: float(_val_)
+
+int64:
+  cpp: int64_t
+  vhal: INT64
+  default_value: 0
+  from:
+    string: std::stoll(_val_)
+  to:
+    BOOLEAN: bool(_val_)
+    INT32: (int32_t)(_val_)
+    UINT32: (uint32_t)(_val_)
+    INT64: (_val_)
+    UINT64: (uint64_t)(_val_)
+    FLOAT: float(_val_)
+
+"string[]":
+  cpp: std::vector<std::string>
+  vhal: STRING
+  default_value: []
+  from:
+    string: _val_  # You must parse string → list yourself
+  to:
+    STRING_ARRAY: (_val_)
+
+"int32[]":
+  cpp: std::vector<int32_t>
+  vhal: INT32_VEC
+  default_value: []
+  from:
+    string: _val_  # You must parse string → list yourself
+  to:
+    INT32_VEC: (_val_)
+
+"float[]":
+  cpp: std::vector<float>
+  vhal: FLOAT_VEC
+  default_value: []
+  from:
+    string: _val_  # You must parse string → list yourself
+  to:
+    FLOAT_VEC: (_val_)

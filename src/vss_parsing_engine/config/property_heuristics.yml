@@ -1,0 +1,103 @@
+# This file defines heuristic rules for inferring Android VHAL property attributes
+# (like access mode and change mode) based on VSS signal names or paths.
+# Rules are processed in order (from top to bottom within each section).
+# The first rule whose patterns match the VSS signal's name or path will apply.
+
+# --- Access Mode Inference Rules ---
+# Rules to determine if a property is READ, WRITE, or READ_WRITE.
+# Patterns are case-insensitive and will be matched against the VSS signal's name.
+# For more advanced matching, regex patterns can be used in the 'patterns' list.
+access_mode_rules:
+  - name: "Read-Write for Control/Toggle Properties"
+    patterns: ["Enabled", "Switch", "On", "Pos", "Move", "Select", "Set", "Level"]
+    vhal_access: "READ_WRITE"
+    description: "Properties that can be read for current status and written to change state or position."
+    priority: 1 # High priority for common read/write patterns
+
+  - name: "Write-Only for Commands/Requests"
+    patterns: ["Command", "Request", "Clear"] # e.g., CRUISE_CONTROL_COMMAND, SHUTDOWN_REQUEST, OBD2_FREEZE_FRAME_CLEAR
+    vhal_access: "WRITE"
+    description: "Properties that are primarily used to send commands to the vehicle."
+    priority: 2
+
+  - name: "Read-Only for Status, Info, and Sensor Readings"
+    patterns: ["Status", "State", "Level", "Current", "Info", "Temperature", "Speed", "Odometer", "Pressure", "Detected", "Warning", "Reason"]
+    vhal_access: "READ"
+    description: "Properties that typically provide data from vehicle sensors or fixed information."
+    priority: 3
+
+  - name: "Default Read-Only" # Catch-all for anything not explicitly matched above
+    patterns: [".*"] # Matches any string (regex for 'any')
+    vhal_access: "READ"
+    description: "Default access mode if no other specific rule matches."
+    priority: 99
+
+
+# --- Change Mode Inference Rules ---
+# Rules to determine if a property is STATIC, ON_CHANGE, or CONTINUOUS.
+# Patterns are case-insensitive and will be matched against the VSS signal's name.
+change_mode_rules:
+  - name: "Continuous for Real-time Measurements"
+    patterns: ["Speed", "RPM", "Temperature", "Pressure", "Level", "Rate", "Pos", "Move", "Remaining"] # e.g., PERF_VEHICLE_SPEED, ENGINE_RPM, TIRE_PRESSURE, EV_BATTERY_INSTANTANEOUS_CHARGE_RATE, RANGE_REMAINING
+    vhal_change_mode: "CONTINUOUS"
+    description: "Properties whose values change frequently and continuously."
+    priority: 1
+
+  - name: "On-Change for Event-driven Updates"
+    patterns: ["State", "Status", "Enabled", "Switch", "Open", "Lock", "Buckled", "Detected", "Warning", "Engaged", "Connected", "Change"] # e.g., DOOR_LOCK, ABS_ACTIVE, FUEL_DOOR_OPEN, LANE_KEEP_ASSIST_ENABLED
+    vhal_change_mode: "ON_CHANGE"
+    description: "Properties whose values change only when a specific event occurs or a threshold is crossed."
+    priority: 2
+
+  - name: "Static for Fixed Vehicle Information"
+    patterns: ["VIN", "Make", "Model", "Year", "Capacity", "Dimensions", "Location", "Type", "Class", "CurbWeight", "Required"] # e.g., INFO_VIN, INFO_FUEL_CAPACITY, INFO_EXTERIOR_DIMENSIONS
+    vhal_change_mode: "STATIC"
+    description: "Properties whose values are fixed after vehicle boot-up."
+    priority: 3
+
+  - name: "Default On-Change" # Catch-all for anything not explicitly matched above
+    patterns: [".*"] # Matches any string (regex for 'any')
+    vhal_change_mode: "ON_CHANGE"
+    description: "Default change mode if no other specific rule matches."
+    priority: 99
+
+
+# --- Area Type Inference Rules ---
+# Rules to determine the VHAL area type (GLOBAL, WINDOW, MIRROR, SEAT, DOOR, WHEEL)
+# Patterns are case-insensitive and will be matched against the VSS signal's path.
+area_type_rules:
+  - name: "Door Area"
+    patterns: ["Door", "DoorLock", "DoorOpen"]
+    vhal_area: "DOOR"
+    description: "Properties related to vehicle doors."
+    priority: 1
+
+  - name: "Window Area"
+    patterns: ["Window", "WindowPos", "WindowLock"]
+    vhal_area: "WINDOW"
+    description: "Properties related to vehicle windows."
+    priority: 1
+
+  - name: "Seat Area"
+    patterns: ["Seat", "SeatPos", "SeatHeat", "SeatCool"]
+    vhal_area: "SEAT"
+    description: "Properties related to vehicle seats."
+    priority: 1
+
+  - name: "Mirror Area"
+    patterns: ["Mirror", "MirrorPos", "MirrorFold"]
+    vhal_area: "MIRROR"
+    description: "Properties related to vehicle mirrors."
+    priority: 1
+
+  - name: "Wheel Area"
+    patterns: ["Wheel", "Tire", "TirePressure"]
+    vhal_area: "WHEEL"
+    description: "Properties related to vehicle wheels and tires."
+    priority: 1
+
+  - name: "Default Global Area"
+    patterns: [".*"]
+    vhal_area: "GLOBAL"
+    description: "Default area type for properties that don't match specific area patterns."
+    priority: 99

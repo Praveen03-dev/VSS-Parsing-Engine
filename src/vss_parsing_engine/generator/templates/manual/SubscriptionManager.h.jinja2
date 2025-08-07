@@ -1,0 +1,468 @@
+/*
+ * Copyright (C) 2024 VSS Parsing Engine
+ * Enhanced Subscription Manager for Vehicle HAL
+ * Generated from: {{ vss_file_path }}
+ * Total properties: {{ properties|length }}
+ */
+
+#ifndef VHAL_V2_0_SUBSCRIPTION_MANAGER_H_
+#define VHAL_V2_0_SUBSCRIPTION_MANAGER_H_
+
+#include <vhal_v2_0/VehicleHal.h>
+#include <vhal_v2_0/VehiclePropertyStore.h>
+#include <map>
+#include <set>
+#include <memory>
+#include <thread>
+#include <atomic>
+#include <mutex>
+#include <chrono>
+#include <functional>
+#include <algorithm>
+
+namespace android::hardware::automotive::vehicle::V2_0::impl {
+
+/**
+ * Manages subscriptions for VHAL properties and handles periodic updates.
+ * Provides sophisticated subscription management with different update rates
+ * for CONTINUOUS and ON_CHANGE properties.
+ */
+class SubscriptionManager {
+public:
+    /**
+     * Information about a subscription.
+     */
+    struct SubscriptionInfo {
+        int32_t propId;
+        float sampleRate;
+        VehiclePropertyChangeMode changeMode;
+        std::chrono::steady_clock::time_point lastUpdate;
+        std::function<void()> updateCallback;
+        std::atomic<bool> isActive{true};
+        
+        SubscriptionInfo(int32_t id, float rate, VehiclePropertyChangeMode mode)
+            : propId(id), sampleRate(rate), changeMode(mode), 
+              lastUpdate(std::chrono::steady_clock::now()) {}
+    };
+    
+    using PropertyUpdateCallback = std::function<void(const VehiclePropValue& value)>;
+    using PropertyGenerator = std::function<VehiclePropValue()>;
+
+private:
+    std::map<int32_t, std::unique_ptr<SubscriptionInfo>> subscriptions_;
+    std::map<int32_t, PropertyGenerator> propertyGenerators_;
+    std::map<int32_t, VehiclePropValue> lastValues_; // For ON_CHANGE comparison
+    
+    PropertyUpdateCallback updateCallback_;
+    std::shared_ptr<VehiclePropertyStore> propStore_;
+    
+    std::atomic<bool> running_{false};
+    std::unique_ptr<std::thread> updateThread_;
+    mutable std::mutex subscriptionMutex_;
+    
+    // Update rates
+    static constexpr float DEFAULT_CONTINUOUS_RATE = 10.0f; // 10 Hz
+    static constexpr float DEFAULT_ON_CHANGE_CHECK_RATE = 5.0f; // 5 Hz
+    static constexpr float MAX_UPDATE_RATE = 100.0f; // 100 Hz max
+    static constexpr float MIN_UPDATE_RATE = 0.1f; // 0.1 Hz min
+
+public:
+    /**
+     * Constructor.
+     * @param propStore Shared property store
+     * @param callback Callback for property updates
+     */
+    SubscriptionManager(std::shared_ptr<VehiclePropertyStore> propStore,
+                       PropertyUpdateCallback callback)
+        : propStore_(std::move(propStore)), updateCallback_(std::move(callback)) {}
+    
+    /**
+     * Destructor - stops all subscriptions.
+     */
+    ~SubscriptionManager() {
+        stop();
+    }
+    
+    /**
+     * Add a subscription for a property.
+     * @param propId Property ID
+     * @param sampleRate Sample rate in Hz (for CONTINUOUS properties)
+     * @param changeMode Property change mode
+     * @return StatusCode indicating success or failure
+     */
+    StatusCode addSubscription(int32_t propId, float sampleRate, 
+                              VehiclePropertyChangeMode changeMode) {
+        std::lock_guard<std::mutex> lock(subscriptionMutex_);
+        
+        // Validate sample rate
+        float validatedRate = std::clamp(sampleRate, MIN_UPDATE_RATE, MAX_UPDATE_RATE);
+        
+        // Create subscription info
+        auto subscription = std::make_unique<SubscriptionInfo>(propId, validatedRate, changeMode);
+        
+        // Store subscription
+        subscriptions_[propId] = std::move(subscription);
+        
+        // Initialize last value for ON_CHANGE properties
+        if (changeMode == VehiclePropertyChangeMode::ON_CHANGE) {
+            VehiclePropValue initialValue;
+            initialValue.prop = propId;
+            if (propStore_ && propStore_->readValue(propId, initialValue) == StatusCode::OK) {
+                lastValues_[propId] = initialValue;
+            }
+        }
+        
+        // Start update thread if not running
+        if (!running_.load()) {
+            start();
+        }
+        
+        return StatusCode::OK;
+    }
+    
+    /**
+     * Remove a subscription.
+     * @param propId Property ID
+     * @return StatusCode indicating success or failure
+     */
+    StatusCode removeSubscription(int32_t propId) {
+        std::lock_guard<std::mutex> lock(subscriptionMutex_);
+        
+        auto it = subscriptions_.find(propId);
+        if (it != subscriptions_.end()) {
+            it->second->isActive.store(false);
+            subscriptions_.erase(it);
+            lastValues_.erase(propId);
+            
+            // Stop update thread if no subscriptions remain
+            if (subscriptions_.empty() && running_.load()) {
+                stop();
+            }
+            
+            return StatusCode::OK;
+        }
+        
+        return StatusCode::INVALID_PROP;
+    }
+    
+    /**
+     * Register a property generator for simulation.
+     * @param propId Property ID
+     * @param generator Function that generates property values
+     */
+    void registerPropertyGenerator(int32_t propId, PropertyGenerator generator) {
+        std::lock_guard<std::mutex> lock(subscriptionMutex_);
+        propertyGenerators_[propId] = std::move(generator);
+    }
+    
+    /**
+     * Check if a property is subscribed.
+     * @param propId Property ID
+     * @return true if subscribed
+     */
+    bool isSubscribed(int32_t propId) const {
+        std::lock_guard<std::mutex> lock(subscriptionMutex_);
+        auto it = subscriptions_.find(propId);
+        return it != subscriptions_.end() && it->second->isActive.load();
+    }
+    
+    /**
+     * Get number of active subscriptions.
+     * @return Number of subscriptions
+     */
+    size_t getSubscriptionCount() const {
+        std::lock_guard<std::mutex> lock(subscriptionMutex_);
+        size_t count = 0;
+        for (const auto& [propId, info] : subscriptions_) {
+            if (info->isActive.load()) count++;
+        }
+        return count;
+    }
+    
+    /**
+     * Manually trigger an update for a property (for ON_CHANGE properties).
+     * @param propId Property ID
+     * @param value New value
+     */
+    void triggerPropertyUpdate(int32_t propId, const VehiclePropValue& value) {
+        std::lock_guard<std::mutex> lock(subscriptionMutex_);
+        
+        auto it = subscriptions_.find(propId);
+        if (it != subscriptions_.end() && it->second->isActive.load() &&
+            it->second->changeMode == VehiclePropertyChangeMode::ON_CHANGE) {
+            
+            // Check if value actually changed
+            auto lastIt = lastValues_.find(propId);
+            if (lastIt == lastValues_.end() || !valuesEqual(lastIt->second, value)) {
+                lastValues_[propId] = value;
+                if (updateCallback_) {
+                    updateCallback_(value);
+                }
+            }
+        }
+    }
+    
+    /**
+     * Update subscription rate for a property.
+     * @param propId Property ID
+     * @param newRate New sample rate in Hz
+     * @return StatusCode indicating success or failure
+     */
+    StatusCode updateSubscriptionRate(int32_t propId, float newRate) {
+        std::lock_guard<std::mutex> lock(subscriptionMutex_);
+        
+        auto it = subscriptions_.find(propId);
+        if (it != subscriptions_.end() && it->second->isActive.load()) {
+            float validatedRate = std::clamp(newRate, MIN_UPDATE_RATE, MAX_UPDATE_RATE);
+            it->second->sampleRate = validatedRate;
+            return StatusCode::OK;
+        }
+        
+        return StatusCode::INVALID_PROP;
+    }
+
+private:
+    /**
+     * Start the subscription update thread.
+     */
+    void start() {
+        if (running_.load()) return;
+        
+        running_.store(true);
+        updateThread_ = std::make_unique<std::thread>(&SubscriptionManager::updateLoop, this);
+    }
+    
+    /**
+     * Stop the subscription update thread.
+     */
+    void stop() {
+        running_.store(false);
+        if (updateThread_ && updateThread_->joinable()) {
+            updateThread_->join();
+        }
+        updateThread_.reset();
+    }
+    
+    /**
+     * Main update loop for subscriptions.
+     */
+    void updateLoop() {
+        while (running_.load()) {
+            auto now = std::chrono::steady_clock::now();
+            
+            {
+                std::lock_guard<std::mutex> lock(subscriptionMutex_);
+                
+                // Clean up inactive subscriptions
+                for (auto it = subscriptions_.begin(); it != subscriptions_.end();) {
+                    if (!it->second->isActive.load()) {
+                        lastValues_.erase(it->first);
+                        it = subscriptions_.erase(it);
+                    } else {
+                        ++it;
+                    }
+                }
+                
+                // Process active subscriptions
+                for (auto& [propId, subscription] : subscriptions_) {
+                    if (!subscription || !subscription->isActive.load()) continue;
+                    
+                    // Calculate update interval
+                    auto interval = std::chrono::milliseconds(
+                        static_cast<int>(1000.0f / subscription->sampleRate));
+                    
+                    // Check if it's time to update
+                    if (now - subscription->lastUpdate >= interval) {
+                        processPropertyUpdate(propId, *subscription, now);
+                    }
+                }
+            }
+            
+            // Sleep for a short interval to avoid busy waiting
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        }
+    }
+    
+    /**
+     * Process an update for a specific property.
+     * @param propId Property ID
+     * @param subscription Subscription info
+     * @param now Current time
+     */
+    void processPropertyUpdate(int32_t propId, SubscriptionInfo& subscription,
+                              std::chrono::steady_clock::time_point now) {
+        subscription.lastUpdate = now;
+        
+        VehiclePropValue value;
+        value.prop = propId;
+        value.timestamp = std::chrono::duration_cast<std::chrono::nanoseconds>(
+            now.time_since_epoch()).count();
+        
+        bool shouldUpdate = false;
+        
+        // Get value from generator or property store
+        auto generatorIt = propertyGenerators_.find(propId);
+        if (generatorIt != propertyGenerators_.end()) {
+            value = generatorIt->second();
+        } else if (propStore_) {
+            propStore_->readValue(propId, value);
+        }
+        
+        // Determine if we should send the update
+        if (subscription.changeMode == VehiclePropertyChangeMode::CONTINUOUS) {
+            // Always send CONTINUOUS updates
+            shouldUpdate = true;
+        } else if (subscription.changeMode == VehiclePropertyChangeMode::ON_CHANGE) {
+            // Only send ON_CHANGE updates if value changed
+            auto lastIt = lastValues_.find(propId);
+            if (lastIt == lastValues_.end() || !valuesEqual(lastIt->second, value)) {
+                lastValues_[propId] = value;
+                shouldUpdate = true;
+            }
+        }
+        
+        // Send update if needed
+        if (shouldUpdate && updateCallback_) {
+            updateCallback_(value);
+        }
+    }
+    
+    /**
+     * Compare two VehiclePropValue objects for equality.
+     * @param a First value
+     * @param b Second value
+     * @return true if values are equal
+     */
+    bool valuesEqual(const VehiclePropValue& a, const VehiclePropValue& b) const {
+        if (a.prop != b.prop) return false;
+        
+        // Compare based on value type
+        if (!a.value.int32Values.empty() && !b.value.int32Values.empty()) {
+            return a.value.int32Values == b.value.int32Values;
+        }
+        if (!a.value.int64Values.empty() && !b.value.int64Values.empty()) {
+            return a.value.int64Values == b.value.int64Values;
+        }
+        if (!a.value.floatValues.empty() && !b.value.floatValues.empty()) {
+            // Use epsilon comparison for floats
+            if (a.value.floatValues.size() != b.value.floatValues.size()) return false;
+            for (size_t i = 0; i < a.value.floatValues.size(); ++i) {
+                if (std::abs(a.value.floatValues[i] - b.value.floatValues[i]) > 0.001f) {
+                    return false;
+                }
+            }
+            return true;
+        }
+        if (!a.value.stringValue.empty() && !b.value.stringValue.empty()) {
+            return a.value.stringValue == b.value.stringValue;
+        }
+        
+        return true; // Default case
+    }
+};
+
+{% set continuous_properties = [] %}
+{% set on_change_properties = [] %}
+{% set static_properties = [] %}
+
+{% for p in properties %}
+    {% if p.vhal_change_mode|upper == 'CONTINUOUS' %}
+        {% set _ = continuous_properties.append(p) %}
+    {% elif p.vhal_change_mode|upper == 'ON_CHANGE' %}
+        {% set _ = on_change_properties.append(p) %}
+    {% else %}
+        {% set _ = static_properties.append(p) %}
+    {% endif %}
+{% endfor %}
+
+/**
+ * Property-specific subscription helpers for the {{ properties|length }} VSS properties.
+ */
+class VSSSubscriptionHelper {
+public:
+    // Continuous properties ({{ continuous_properties|length }} total)
+    static constexpr std::array<int32_t, {{ continuous_properties|length }}> CONTINUOUS_PROPERTIES = {
+    {%- for p in continuous_properties %}
+        toInt(VehicleProperty::{{ p.vhal_id }}){{ "," if not loop.last }}
+    {%- endfor %}
+    };
+    
+    // On-change properties ({{ on_change_properties|length }} total) 
+    static constexpr std::array<int32_t, {{ on_change_properties|length }}> ON_CHANGE_PROPERTIES = {
+    {%- for p in on_change_properties %}
+        toInt(VehicleProperty::{{ p.vhal_id }}){{ "," if not loop.last }}
+    {%- endfor %}
+    };
+    
+    // Static properties ({{ static_properties|length }} total)
+    static constexpr std::array<int32_t, {{ static_properties|length }}> STATIC_PROPERTIES = {
+    {%- for p in static_properties %}
+        toInt(VehicleProperty::{{ p.vhal_id }}){{ "," if not loop.last }}
+    {%- endfor %}
+    };
+    
+    /**
+     * Check if a property supports subscriptions.
+     * @param propId Property ID
+     * @return true if property supports subscriptions
+     */
+    static bool isSubscribable(int32_t propId) {
+        // Check if property is in continuous or on-change arrays
+        auto isInArray = [propId](const auto& arr) {
+            return std::find(arr.begin(), arr.end(), propId) != arr.end();
+        };
+        
+        return isInArray(CONTINUOUS_PROPERTIES) || isInArray(ON_CHANGE_PROPERTIES);
+    }
+    
+    /**
+     * Get the change mode for a property.
+     * @param propId Property ID
+     * @return VehiclePropertyChangeMode for the property
+     */
+    static VehiclePropertyChangeMode getChangeMode(int32_t propId) {
+        auto isInArray = [propId](const auto& arr) {
+            return std::find(arr.begin(), arr.end(), propId) != arr.end();
+        };
+        
+        if (isInArray(CONTINUOUS_PROPERTIES)) {
+            return VehiclePropertyChangeMode::CONTINUOUS;
+        } else if (isInArray(ON_CHANGE_PROPERTIES)) {
+            return VehiclePropertyChangeMode::ON_CHANGE;
+        } else {
+            return VehiclePropertyChangeMode::STATIC;
+        }
+    }
+    
+    /**
+     * Get recommended sample rate for a property.
+     * @param propId Property ID
+     * @return Recommended sample rate in Hz
+     */
+    static float getRecommendedSampleRate(int32_t propId) {
+        // Property-specific sample rate recommendations based on VSS data
+    {% for p in properties %}
+        {% if p.vhal_change_mode|upper == 'CONTINUOUS' %}
+            {% if 'speed' in p.name.lower() or 'velocity' in p.name.lower() %}
+        if (propId == toInt(VehicleProperty::{{ p.vhal_id }})) return 20.0f; // High freq for speed
+            {% elif 'temp' in p.name.lower() or 'temperature' in p.name.lower() %}
+        if (propId == toInt(VehicleProperty::{{ p.vhal_id }})) return 0.5f; // Low freq for temperature
+            {% elif 'rpm' in p.name.lower() %}
+        if (propId == toInt(VehicleProperty::{{ p.vhal_id }})) return 15.0f; // Medium freq for RPM
+            {% elif 'pressure' in p.name.lower() %}
+        if (propId == toInt(VehicleProperty::{{ p.vhal_id }})) return 1.0f; // Low freq for pressure
+            {% else %}
+        if (propId == toInt(VehicleProperty::{{ p.vhal_id }})) return 10.0f; // Default continuous freq
+            {% endif %}
+        {% elif p.vhal_change_mode|upper == 'ON_CHANGE' %}
+        if (propId == toInt(VehicleProperty::{{ p.vhal_id }})) return 5.0f; // Check rate for on-change
+        {% endif %}
+    {% endfor %}
+        
+        return 10.0f; // Default rate
+    }
+};
+
+} // namespace android::hardware::automotive::vehicle::V2_0::impl
+
+#endif // VHAL_V2_0_SUBSCRIPTION_MANAGER_H_
